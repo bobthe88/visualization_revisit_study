@@ -380,7 +380,7 @@ export function Shell({ globalConfig }: { globalConfig: GlobalConfig }) {
 
         setStore(newStore);
 
-        if (resolvedModes.dataCollectionEnabled) {
+        if (resolvedModes.dataCollectionEnabled && import.meta.env.MODE !== 'synthetic-preview') {
           fetchParticipantIp().then(async (ip) => {
             if (isCancelled || !ip.ip || participantSession.metadata.ip === ip.ip) {
               return;

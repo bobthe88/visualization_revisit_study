@@ -24,87 +24,81 @@ To run your study based on this template locally, you will need to install node 
 * To run locally, run `yarn serve`.
 * Go to [http://localhost:8080](http://localhost:8080) to view it in your browser. The page will reload when you make changes.
 
-## Cedar Watch pilot integration (pilot approval confirmed; deployment not verified)
+## Cedar Watch synthetic preview: current behavior and limits
 
-The draft Cedar Watch study is registered in `public/global.json` as
-`cedar-watch-pilot`. Its single `website` component loads the standalone pilot from
-`cedar-watch-pilot/app/index.html` and declares the reactive `pilotSession` response. `yarn build`
-builds the iframe app before the host and copies the output into `public/`, so the frame is served
-from this host's origin. The source checkout is pinned in `scripts/build-cedar-watch.sh` and the
-deployment workflow; `CEDAR_WATCH_SOURCE_COMMIT` may override that pin for an explicitly reviewed
-build. Do not change the pin for an in-progress study without the protocol's version/recovery review.
-The child base path is derived from the actual host base path for `yarn build`; the deployment
-workflow derives GitHub Pages project paths from the repository name, uses `/` for an owner site,
-and accepts `VITE_BASE_PATH` as an explicit override. For the standalone local UI at `/`, use
-`yarn build:cedar-watch` (defaults to `/cedar-watch-pilot/app/`) before `yarn serve`; do not reuse a
-production-prefix artifact at the root. This is a production Vite build, so its bridge remains
-disabled on HTTP localhost. A production bridge requires HTTPS and an exact approved parent origin.
-The child source has a Vite-DEV-only HTTP loopback opt-in: it requires an exact loopback parent in
-`VITE_REVISIT_PARENT_ORIGINS` and `VITE_REVISIT_ALLOW_HTTP_LOOPBACK=true`. No end-to-end ReVISit
-host/dev-server loopback flow has been verified, so it is not claimed as supported here. Production
-builds remain HTTPS-only; the production build script rejects HTTP origins and explicitly sets
-`VITE_REVISIT_ALLOW_HTTP_LOOPBACK=false`. A local build needs network access to fetch the source pin.
+The current checked-in study is registered as `cedar-watch-pilot` in `public/global.json` and
+configured in `public/cedar-watch-pilot/StudyConfig.json`. The host, not the embedded app, owns the
+study flow: a fictional practice with feedback, ten trial questions, confidence and perceived-
+difficulty ratings, then a usability survey and debrief. Each trial's iframe displays the evidence
+visualization only. The question and four answer choices (including `unknown`) and the ratings are
+native reVISit sidebar controls. The frame does not own or submit the old complete `pilotSession`
+instrument.
 
-The upstream pin predates the sibling's iframe bridge changes, so the build applies the checked-in
-`scripts/cedar-watch-revisit-bridge.patch`, `scripts/cedar-watch-loopback.patch`, and
-`scripts/cedar-watch-tests.patch` in order, checking each against the pin. The overlays include the
-final child bridge and its relevant tests. Their combined SHA-256 prefix is included with the source
-SHA in each session's `sourceCommit`. The build checks for bridge, recovery, HTTPS/loopback guard,
-consent, and test markers; it runs the child typecheck and tests before building. It passes
-`VITE_REVISIT_PARENT_ORIGINS` to the production build and explicitly sets the HTTP loopback opt-in
-to `false`. The website config sends an empty `parameters` object to start the host/child ready
-handshake.
+This is a synthetic preview with a fixed group 0 and stimulus seed 271828; assignment is neither
+randomized nor participant-hashed. The preview requests and records no research consent. An
+acknowledgement or preview warning is not consent. Do not use this configuration for participant
+data or describe it as an approved collection study.
 
-The deployment workflow supplies `CEDAR_WATCH_PARENT_ORIGINS`; by default this is the HTTPS
-`github.repository_owner.github.io` origin. Set the GitHub Actions variable
-`CEDAR_WATCH_PARENT_ORIGINS` to the exact comma-separated origin-only allowlist when using a custom
-approved host. Do not include paths or broad wildcards. The child must compare its configured list
-with `parentOrigin` and the referrer and remain disabled if absent or mismatched. The build script
-validates configured values, and production deployment requires a non-empty allowlist. Local builds
-do not require Supabase or an origin allowlist; without an explicit trusted origin the child bridge
-remains disabled for embedding.
+### Responses, evidence, and missing data
 
-This bridge and the host's current completion validator use the Cedar Watch `usability` field and
-check the expected ten-trial session shape. The child sends completion to the host, but receives no
-durable-write acknowledgment; host acceptance/validation is not proof that data reached persistent
-storage. The user confirms applicable certifications and pilot approval. This repository does not
-independently establish the certification records, verify a deployed environment, or demonstrate
-durable storage. End-to-end host/browser testing, persistence/failure-mode review, and deployment
-security review remain outstanding; this source checkout is not a verified collection environment.
+The host records answers and ratings as native responses in its browser-local state. Practice is a
+separate response and must not be counted as an experimental trial. Trial identity and the fixed
+family/variant/condition assignment come from the study configuration and must be joined to host
+records using the appropriate component and configuration version. `unknown` is an answer, not a
+missing response. Host exports are not the standalone child's session JSON/CSV and are not directly
+compatible with its analysis. Visualization selections, interaction samples, and event/timing
+telemetry are not captured as trial data in this flow. Do not infer attention, active time, or which
+reports a person selected. Inventory actual host export fields before analysis and define/test a
+versioned mapping; none is currently validated.
 
-The hosted child blocks resuming any session already stored in that browser because it cannot bind
-that old local record to the host's participant record. It allows clearing the browser copy but
-does not claim to delete a host-side copy. Local standalone sessions can resume through the distinct
-practice before returning to trials or the survey.
+The preview uses browser `localStorage`, not a verified central durable store. Browser data may be
+cleared, unavailable, or lost; a downloaded export is a separate copy. Progress or completion in
+the interface is not proof of a durable save, recovery, or successful collection. Supabase
+collection is pending: no Supabase configuration, effective permissions/RLS, deployment, durable
+acknowledgement, or recovery has been demonstrated for this current flow. Never put a service-role
+credential in a browser build. No data-security, durable-save, or production-readiness guarantee is
+made.
 
-Validation for the current loopback overlay: all three patches applied to the exact pinned commit,
-`git diff --check` passed, and the four overlaid source/test files matched the final child files.
-Child typecheck passed and `npm test` passed all 21 tests across 3 files. The production packaging
-script passed typecheck/tests and built the artifact using test base
-`/visualization_revisit_study/cedar-watch-pilot/app/` and HTTPS origin `https://curentleaf.github.io`;
-the bundle's origin, disabled loopback flag, assets, and source/overlay fingerprint
-`4b6927b12d212f139d003348b79c912a991bdb8b+bridge-224bc56c6af4a0eb` were verified. This verifies
-the scripted artifact build, not an actual host deployment, durable save, RLS policy, or local HTTP
-loopback integration. The Vite build emits its existing large-chunk and Zod annotation warnings.
+### Existing evidence and controls
 
-### Storage configuration
+The source configuration and host code provide evidence for the current flow and response controls;
+mocked iframe/controller and storage tests provide narrower checks of existing host behavior. In
+`src/components/Shell.tsx`, the IP lookup to `https://api.ipify.org?format=json` is skipped in the
+`synthetic-preview` mode, but remains in production mode. An earlier local rehearsal identified
+that request; it is historical evidence and does not describe the current exact synthetic-preview
+build. The latest reported exact-build browser test observed no ipify or other off-origin calls
+among 119 requests. This observation applies to that tested synthetic build, not production or an
+undeployed preview; production's external request remains subject to privacy review. Do not claim
+that production is fully offline or that the production lookup has been disabled.
 
-The host reads `VITE_STORAGE_ENGINE`, `VITE_SUPABASE_URL`, and `VITE_SUPABASE_ANON_KEY` at build
-time. The GitHub Pages deployment always sets `VITE_STORAGE_ENGINE=supabase` and fails unless
-`VITE_SUPABASE_URL` (Actions variable) and `VITE_SUPABASE_ANON_KEY` (Actions secret) are configured.
-Do not add a Supabase requirement to local builds: local `yarn build` uses the existing checked-in
-local-storage setting unless the caller explicitly overrides it. The anonymous key is client-exposed
-by design and is not a privileged secret; configure project policies accordingly. Never put a
-service-role key in the client or in any `VITE_*` value. The repository does not contain
-Cedar-Watch-owned production credentials or a verified project; until the deployment values and
-project policies are approved, GitHub deployment intentionally fails instead of silently deploying
-with local storage. Pilot deployment requires a study-owned project, verified row-level security
-(RLS) policies, and isolated staging tests for access roles, insert/read behavior, retries,
-completion persistence, export, deletion, and recovery. Do not treat RLS being enabled or the build
-passing as evidence that those policies work. Existing template
-`.env` values are not evidence of a study-owned/approved backend. Do not edit unrelated environment
-files to enable hosted collection.
+An earlier local-browser rehearsal reported in `artifacts/design.md` used the current config served
+separately from an earlier built artifact, so that run alone was mixed-version evidence. An
+independent tester later exercised the exact rebuilt `dist` over local HTTPS in Chromium, completing
+practice (including a wrong answer), all ten trials, the survey, and debrief; required-answer gating
+and iframe contents were checked. The test observed 119 requests with no off-origin requests and no
+browser errors. This is evidence for that tested synthetic artifact and flow, not for production,
+Supabase persistence, or whichever artifact is currently published on Pages. The local child suite
+passed 27 tests across 5 files; the focused host tests run here passed 40 tests across 4 files, and a
+separate tester reports 51 host tests passed with additional suites included. Lint and typecheck
+passed. Supabase setup/access tests, export mapping, and other failure-path coverage remain pending.
+See `artifacts/design.md`, `artifacts/tasks.md`, and `artifacts/plan.md` for further evidence and open
+work.
 
-No data-security guarantees, durable-save guarantees, or production readiness are claimed by this
-packaging. Static hosting itself does not provide data storage.
- 
+### Build and local HTTP caveat
+
+`yarn build` packages the child visualization into the host's `public/` tree using
+`scripts/build-cedar-watch.sh`; a local build fetches the pinned child source and therefore needs
+network access. The production child bridge requires HTTPS and an exact trusted parent origin. Its
+HTTP loopback option is restricted to Vite development, with an exact loopback parent allowlist and
+explicit opt-in. No end-to-end ReVISit host/dev-server HTTP loopback flow has been verified; do not
+assume that serving the production build at `http://localhost` enables the iframe bridge.
+
+An earlier synthetic preview publication was reported at
+`https://bobthe88.github.io/visualization_revisit_study/` (workflow run `42510782417`, commit
+`d709c1c2d3d6b90e392febfb182e97055e9268db`). That earlier run's HTTP 200 and bundle check do not
+establish the contents of a later publication. For each manual preview dispatch, verify the exact
+revision and run outcome, then inspect the served config, visualization document, warning, and
+storage mode. Publication may replace the repository's active Pages contents. The separately
+selected Supabase collection path remains unverified and is not enabled by this synthetic preview.
+Keep using synthetic data only until scientific, governance, privacy, storage, security, recovery,
+and release gates are separately reviewed and verified.

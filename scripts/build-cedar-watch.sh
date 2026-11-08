@@ -4,7 +4,7 @@ set -eu
 source_repo="https://github.com/curentleaf/adaptive-visualization-recommender.git"
 source_commit="${CEDAR_WATCH_SOURCE_COMMIT:-4b6927b12d212f139d003348b79c912a991bdb8b}"
 patch_dir="$(pwd)/scripts"
-bridge_patches="$patch_dir/cedar-watch-revisit-bridge.patch $patch_dir/cedar-watch-loopback.patch $patch_dir/cedar-watch-tests.patch $patch_dir/cedar-watch-testing-library.patch"
+bridge_patches="$patch_dir/cedar-watch-revisit-bridge.patch $patch_dir/cedar-watch-loopback.patch $patch_dir/cedar-watch-tests.patch $patch_dir/cedar-watch-testing-library.patch $patch_dir/cedar-watch-visualization.patch"
 checkout="${RUNNER_TEMP:-/tmp}/cedar-watch-${source_commit}"
 app_output="${checkout}/study/dist"
 output_root="${CEDAR_WATCH_PUBLIC_DIR:-public}"
@@ -56,6 +56,16 @@ for marker in \
   'session?.responses.length ?? 0' \
   "session.status === 'complete' ? 'debrief' : 'practice'" \
   'allows HTTP only for exact loopback origins under explicit development opt-in' \
+  createVisualizationHandshake \
+  '@REVISIT_COMMS/VIEW_READY' \
+  '@REVISIT_COMMS/VIEW_NOT_READY' \
+  viewNotReady \
+  VisualizationApp \
+  chartReadyGeneration \
+  isValidTrialTuple \
+  visualization.html \
+  visualization-app.test.tsx \
+  'onReady?: () => void' \
   resumeThroughPractice; do
   marker_found=false
   for patch_file in $bridge_patches; do
@@ -125,13 +135,17 @@ VITE_SOURCE_COMMIT="${source_commit}+bridge-${overlay_hash}" \
 VITE_REVISIT_PARENT_ORIGINS="$parent_origins" \
 VITE_REVISIT_ALLOW_HTTP_LOOPBACK=false \
   npm --prefix "$checkout/study" run build -- --base "$public_base"
-if [ ! -s "$app_output/index.html" ]; then
-  printf 'Cedar Watch build did not produce index.html.\n' >&2
+if [ ! -s "$app_output/index.html" ] || [ ! -s "$app_output/visualization.html" ]; then
+  printf 'Cedar Watch build did not produce index.html and visualization.html.\n' >&2
   exit 1
 fi
 rm -rf "$target"
 mkdir -p "$target"
 cp -R "$app_output"/. "$target"/
+if [ ! -s "$target/visualization.html" ]; then
+  printf 'Cedar Watch package did not include visualization.html.\n' >&2
+  exit 1
+fi
 mkdir -p "$assets_target"
 cp "$checkout/study/revisit/public/cedar-watch-pilot/assets/logo.svg" "$assets_target/logo.svg"
 printf 'Built Cedar Watch %s with bridge overlay %s into %s (base %s).\n' "$actual_commit" "$overlay_hash" "$target" "$public_base"

@@ -168,6 +168,7 @@ describe('Shell', () => {
     vi.useRealTimers();
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   test('shows loading context only after startup remains pending for 1.5 seconds', () => {
@@ -291,7 +292,8 @@ describe('Shell', () => {
     postMessageSpy.mockRestore();
   });
 
-  test('happy path: initializeUserStoreRouting runs and renders study', async () => {
+  test('looks up participant IP in normal mode', async () => {
+    vi.stubEnv('MODE', 'test');
     vi.mocked(getStudyConfig).mockResolvedValue(mockActiveConfig);
 
     mockStorageEngine = {
@@ -310,6 +312,36 @@ describe('Shell', () => {
     render(<Shell globalConfig={globalConfig} />);
     await waitFor(() => expect(mockStorageEngine!.initializeStudyDb).toHaveBeenCalled(), { timeout: 3000 });
     await waitFor(() => expect(vi.mocked(studyStoreCreator)).toHaveBeenCalled(), { timeout: 3000 });
+    await waitFor(() => expect(mockStorageEngine!.getParticipantCompletionStatus).toHaveBeenCalled(), { timeout: 3000 });
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+      'https://api.ipify.org?format=json',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    ));
+  });
+
+  test('does not look up participant IP in synthetic preview mode', async () => {
+    vi.stubEnv('MODE', 'synthetic-preview');
+    vi.mocked(getStudyConfig).mockResolvedValue(mockActiveConfig);
+
+    mockStorageEngine = {
+      initializeStudyDb: vi.fn().mockResolvedValue(undefined),
+      saveConfig: vi.fn().mockResolvedValue(undefined),
+      getSequenceArray: vi.fn().mockResolvedValue(['seq1']),
+      getModes: vi.fn().mockResolvedValue({ developmentModeEnabled: false, dataSharingEnabled: false, dataCollectionEnabled: true }),
+      initializeParticipantSession: vi.fn().mockResolvedValue(baseSession),
+      getParticipantCompletionStatus: vi.fn().mockResolvedValue(false),
+      peekCurrentParticipantId: vi.fn().mockResolvedValue(undefined),
+      getAllConfigsFromHash: vi.fn().mockResolvedValue({}),
+      isConnected: vi.fn().mockReturnValue(true),
+      getEngine: vi.fn().mockReturnValue('firebase'),
+    };
+
+    render(<Shell globalConfig={globalConfig} />);
+    await waitFor(() => expect(mockStorageEngine!.initializeStudyDb).toHaveBeenCalled(), { timeout: 3000 });
+    await waitFor(() => expect(vi.mocked(studyStoreCreator)).toHaveBeenCalled(), { timeout: 3000 });
+    await waitFor(() => expect(mockStorageEngine!.getParticipantCompletionStatus).toHaveBeenCalled(), { timeout: 3000 });
+
+    expect(fetch).not.toHaveBeenCalledWith('https://api.ipify.org?format=json', expect.anything());
   });
 
   test('calls setSequenceArray when getSequenceArray returns null', async () => {

@@ -1,0 +1,567 @@
+diff --git a/src/components/charts/VegaChart.tsx b/src/components/charts/VegaChart.tsx
+index 4992212..c1ba4a9 100644
+--- a/src/components/charts/VegaChart.tsx
++++ b/src/components/charts/VegaChart.tsx
+@@ -6,17 +6,21 @@ export function VegaChart({
+   onSelect,
+   onSelectDatum,
+   onBrush,
++  onReady,
++  onError,
+   ariaLabel,
+ }: {
+   spec: Record<string, unknown>;
+   onSelect?: (id: string) => void;
+   onSelectDatum?: (datum: Record<string, unknown>) => void;
+   onBrush?: (start: string, end: string) => void;
++  onReady?: () => void;
++  onError?: (error: unknown) => void;
+   ariaLabel?: string;
+ }) {
+   const host = useRef<HTMLDivElement>(null);
+-  const callbacks = useRef({ onSelect, onSelectDatum, onBrush });
++  const callbacks = useRef({ onSelect, onSelectDatum, onBrush, onReady, onError });
+-  callbacks.current = { onSelect, onSelectDatum, onBrush };
++  callbacks.current = { onSelect, onSelectDatum, onBrush, onReady, onError };
+   useEffect(() => {
+     if (!host.current) return;
+     let active = true;
+@@ -28,6 +32,7 @@ export function VegaChart({
+           return;
+         }
+         finalize = result.finalize;
++        callbacks.current.onReady?.();
+         result.view.addEventListener('click', (_event, item) => {
+           const datum = item?.datum as Record<string, unknown> | undefined;
+           const id = datum?.report_id;
+@@ -51,7 +56,9 @@ export function VegaChart({
+         }
+       })
+       .catch((error) => {
++        if (!active) return;
+         if (host.current) host.current.textContent = `Chart unavailable: ${String(error)}`;
++        callbacks.current.onError?.(error);
+       });
+     return () => {
+       active = false;
+diff --git a/study/src/protocol.ts b/study/src/protocol.ts
+index 5b7df5b..605f45e 100644
+--- a/study/src/protocol.ts
++++ b/study/src/protocol.ts
+@@ -28,6 +28,15 @@ export type TrialAssignment = {
+   condition: StudyCondition;
+ };
+ 
++export function isValidTrialTuple(
++  trialId: string,
++  scenarioFamily: ScenarioId,
++  taskVariant: TaskVariant,
++  condition: StudyCondition,
++): boolean {
++  return trialId === `${scenarioFamily}-${taskVariant}-${condition}`;
++}
++
+ const interactionSchema = z
+   .object({
+     type: z.enum(['report_select', 'visualization_select']),
+diff --git a/study/vite.config.ts b/study/vite.config.ts
+index 41e8636..30777a8 100644
+--- a/study/vite.config.ts
++++ b/study/vite.config.ts
+@@ -27,6 +27,14 @@ export default defineConfig({
+   plugins: [react(), tailwindcss()],
+   resolve: { alias: studyDependencyAliases(path.join(directory, 'node_modules')) },
+   define: { __SOURCE_COMMIT__: JSON.stringify(sourceCommit) },
++  build: {
++    rollupOptions: {
++      input: {
++        index: path.resolve(directory, 'index.html'),
++        visualization: path.resolve(directory, 'visualization.html'),
++      },
++    },
++  },
+   test: {
+     environment: 'jsdom',
+     setupFiles: ['./tests/setup.ts'],
+diff --git a/study/visualization.html b/study/visualization.html
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/study/visualization.html
+@@ -0,0 +1,13 @@
++<!doctype html>
++<html lang="en">
++  <head>
++    <meta charset="UTF-8" />
++    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
++    <meta name="description" content="Synthetic Cedar Watch evidence visualization." />
++    <title>Cedar Watch evidence visualization</title>
++  </head>
++  <body>
++    <div id="root"></div>
++    <script type="module" src="/src/visualization-main.tsx"></script>
++  </body>
++</html>
+diff --git a/study/src/VisualizationApp.tsx b/study/src/VisualizationApp.tsx
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/study/src/VisualizationApp.tsx
+@@ -0,0 +1,108 @@
++import { useEffect, useMemo, useRef, useState } from 'react';
++import { FictionalGridPlot, ObservationTimeline, ReportComparisonTable } from '../../src/components/charts/SituationEvidenceViews';
++import { VegaChart } from '../../src/components/charts/VegaChart';
++import { EvidencePanel } from '../../src/components/details/EvidencePanel';
++import { SCENARIOS } from '../../src/domain/constants';
++import { containsTextMark, getScenarioView } from './studyModel';
++import { createVisualizationHandshake, type VisualizationParams } from './visualizationContract';
++
++export function VisualizationApp() {
++  const [params, setParams] = useState<VisualizationParams | null>(null);
++  const [error, setError] = useState('');
++  const [generation, setGeneration] = useState(0);
++  const [chartReadyGeneration, setChartReadyGeneration] = useState<number | null>(null);
++  const bridgeRef = useRef<ReturnType<typeof createVisualizationHandshake> | null>(null);
++  const paramsRef = useRef<VisualizationParams | null>(null);
++  const generationRef = useRef(0);
++  useEffect(() => {
++    const origins = (import.meta.env.VITE_REVISIT_PARENT_ORIGINS ?? '').split(',').map((item: string) => item.trim()).filter(Boolean);
++    const bridge = createVisualizationHandshake(window.location, window, document.referrer, origins,
++      import.meta.env.DEV && import.meta.env.VITE_REVISIT_ALLOW_HTTP_LOOPBACK === 'true');
++    bridgeRef.current = bridge;
++    if (!bridge.enabled) setError('This visualization requires a trusted reVISit host and valid iframe parameters.');
++    else bridge.start((received) => {
++      if (!received) {
++        paramsRef.current = null;
++        generationRef.current += 1;
++        setGeneration(generationRef.current);
++        setChartReadyGeneration(null);
++        setParams(null);
++        setError('The trusted study host sent invalid or mismatched visualization parameters.');
++      } else {
++        setError('');
++        if (paramsRef.current?.trialId !== received.trialId
++        || paramsRef.current?.scenarioFamily !== received.scenarioFamily
++        || paramsRef.current?.taskVariant !== received.taskVariant
++        || paramsRef.current?.condition !== received.condition
++        || paramsRef.current?.stimulusSeed !== received.stimulusSeed) {
++          paramsRef.current = received;
++          generationRef.current += 1;
++          setGeneration(generationRef.current);
++          setChartReadyGeneration(null);
++          setSelectedReportId('');
++          setSelectedRecommendationId('');
++          setParams(received);
++        }
++      }
++    });
++    return () => bridge.dispose();
++  }, []);
++  const view = useMemo(() => params ? getScenarioView(params.scenarioFamily) : null, [params]);
++  const [selectedReportId, setSelectedReportId] = useState('');
++  const [selectedRecommendationId, setSelectedRecommendationId] = useState('');
++  const recommendation = view?.recommendations.find((item) => item.id === selectedRecommendationId) ?? view?.recommendations[0];
++  const hasAsyncChart = Boolean(params?.condition === 'recommended' && recommendation && !containsTextMark(recommendation.vegaLiteSpec));
++  useEffect(() => {
++    if (params && view && (!hasAsyncChart || chartReadyGeneration === generation)) bridgeRef.current?.viewReady();
++  }, [params, view, hasAsyncChart, chartReadyGeneration, generation]);
++  if (error) return <main className="study-shell"><section role="alert"><h1>Visualization unavailable</h1><p>{error}</p></section></main>;
++  if (!params || !view) return <main className="study-shell"><p role="status">Waiting for trusted study data…</p></main>;
++  const selectedReport = view.reports.find((report) => report.report_id === selectedReportId);
++  const relatedReports = selectedReport ? view.reports.filter((report) => report.event_id === selectedReport.event_id && report.report_id !== selectedReport.report_id) : [];
++  return <main className="study-shell study-trial">
++    <header className="study-header">
++      <p className="study-kicker">Fictional synthetic evidence · {params.trialId}</p>
++      <h1>{SCENARIOS[params.scenarioFamily].label}</h1>
++      <p className="condition-label">{params.condition === 'baseline' ? 'Evidence-only view' : 'Task-aware recommended view'}</p>
++      <section className="study-card"><h2>Scenario context</h2><p>{SCENARIOS[params.scenarioFamily].description}</p></section>
++    </header>
++    <p className="study-notice">Use only the reports shown. Missing values are not zero; repeated or derived reports are not independent evidence. These scripted reports do not reveal underlying event ground truth.</p>
++    {params.condition === 'recommended' && <section className="study-card" aria-label="Task-aware recommendation">
++      <h2>Recommendation for this task</h2>
++      {recommendation && <>
++        <p className="selected-chart-label"><strong>Selected chart:</strong> {recommendation.title} · {recommendation.technique}</p>
++        <p>{recommendation.rationale.join(' ')}</p><p className="study-caution">{recommendation.doesNotEstablish}</p>
++        <label className="study-field"><span>Select visualization</span><select value={selectedRecommendationId || recommendation.id} onChange={(event) => {
++          bridgeRef.current?.viewNotReady();
++          generationRef.current += 1;
++          setGeneration(generationRef.current);
++          setChartReadyGeneration(null);
++          setSelectedRecommendationId(event.target.value);
++        }}>{view.recommendations.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
++        {containsTextMark(recommendation.vegaLiteSpec)
++          ? <ReportComparisonTable reports={view.reports} sources={view.data.sources} selectedId={selectedReportId} showInternalIds={false} onSelect={setSelectedReportId} />
++          : <VegaChart key={`${params.trialId}:${generation}:${recommendation.id}`} spec={recommendation.vegaLiteSpec} onSelect={setSelectedReportId} onReady={() => {
++            if (generationRef.current === generation) setChartReadyGeneration(generation);
++          }} onError={() => {
++            if (generationRef.current !== generation) return;
++            bridgeRef.current?.viewNotReady();
++            setChartReadyGeneration(null);
++            setError('The recommended chart could not be rendered; the host was notified that the view is not ready.');
++          }} ariaLabel={`Task-aware recommended ${recommendation.title}`} />}
++      </>}
++    </section>}
++    <section className="study-card"><h2>Available evidence</h2>
++      <ReportComparisonTable reports={view.reports} sources={view.data.sources} selectedId={selectedReportId} showInternalIds={false} onSelect={setSelectedReportId} />
++      <ObservationTimeline reports={view.reports} sources={view.data.sources} selectedId={selectedReportId} onSelect={setSelectedReportId} />
++      <FictionalGridPlot reports={view.reports} locations={view.data.locations} onSelect={setSelectedReportId} />
++    </section>
++    <EvidencePanel report={selectedReport} source={selectedReport ? view.data.sources.find((item) => item.source_id === selectedReport.source_id) : undefined}
++      sources={view.data.sources} relatedReports={relatedReports}
++      location={selectedReport ? view.data.locations.find((item) => item.location_id === selectedReport.location_id) : undefined}
++      provenance={selectedReport ? view.data.provenance.find((item) => item.report_id === selectedReport.report_id) : undefined}
++      output={selectedReport ? view.data.model_outputs.find((item) => item.report_id === selectedReport.report_id) : undefined}
++      analysis={selectedReport ? view.analysis.get(selectedReport.report_id) : undefined}
++      salience={selectedReport ? view.salience.get(selectedReport.report_id) : undefined}
++      recommendation={params.condition === 'recommended' ? recommendation : undefined} modeling={view.modeling} audience="Analyst" collapseTechnicalDetails showTechnicalIdentifiers={false} />
++  </main>;
++}
+diff --git a/study/src/visualization-main.tsx b/study/src/visualization-main.tsx
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/study/src/visualization-main.tsx
+@@ -0,0 +1,7 @@
++import { StrictMode } from 'react';
++import { createRoot } from 'react-dom/client';
++import { VisualizationApp } from './VisualizationApp';
++import '../../src/styles/index.css';
++import './study.css';
++
++createRoot(document.getElementById('root')!).render(<StrictMode><VisualizationApp /></StrictMode>);
+diff --git a/study/src/visualizationContract.ts b/study/src/visualizationContract.ts
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/study/src/visualizationContract.ts
+@@ -0,0 +1,100 @@
++import { z } from 'zod';
++import { isAllowedParentOrigin } from './iframeBridge';
++import { isValidTrialTuple } from './protocol';
++
++const idPattern = /^[A-Za-z0-9_-]{1,128}$/;
++const paramsSchema = z.object({
++  contractVersion: z.literal(1),
++  trialId: z.string().regex(idPattern),
++  scenarioFamily: z.enum(['corroboration', 'conflict', 'uncertain', 'quality', 'anomaly']),
++  taskVariant: z.enum(['A', 'B']),
++  condition: z.enum(['baseline', 'recommended']),
++  stimulusSeed: z.literal(271828),
++}).strict();
++
++export type VisualizationParams = z.infer<typeof paramsSchema>;
++
++export function parseVisualizationParams(value: unknown): VisualizationParams | null {
++  const parsed = paramsSchema.safeParse(value);
++  return parsed.success ? parsed.data : null;
++}
++
++export function createVisualizationHandshake(
++  location: Pick<Location, 'search'>,
++  target: Window,
++  referrer: string,
++  trustedOrigins: readonly string[],
++  allowHttpLoopback = false,
++) {
++  const query = new URLSearchParams(location.search);
++  const id = query.get('id');
++  const componentTrialId = query.get('trialid');
++  const parentOrigin = query.get('parentOrigin');
++  let referrerOrigin: string | null = null;
++  try { referrerOrigin = referrer ? new URL(referrer).origin : null; } catch { /* Fail closed. */ }
++  const origin = isAllowedParentOrigin(parentOrigin, trustedOrigins, allowHttpLoopback)
++    && parentOrigin === referrerOrigin ? parentOrigin : null;
++  const enabled = Boolean(id && idPattern.test(id) && componentTrialId && idPattern.test(componentTrialId)
++    && origin && target !== target.parent);
++  let started = false;
++  let received = false;
++  let sentViewReady = false;
++  let acceptedParams: VisualizationParams | null = null;
++  let callback: ((params: VisualizationParams | null) => void) | undefined;
++  const viewMessage = (type: '@REVISIT_COMMS/VIEW_READY' | '@REVISIT_COMMS/VIEW_NOT_READY') => ({
++    error: false,
++    type,
++    iframeId: id,
++    message: { contractVersion: 1, trialId: componentTrialId },
++  });
++  const receive = (event: MessageEvent) => {
++    if (!enabled || event.source !== target.parent || event.origin !== origin) return;
++    const envelope = event.data;
++    if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) return;
++    const message = envelope as Record<string, unknown>;
++    if (message.error !== false || message.iframeId !== id || message.type !== '@REVISIT_COMMS/STUDY_DATA') return;
++    const params = parseVisualizationParams(message.message);
++    const validParams = params && isValidTrialTuple(params.trialId, params.scenarioFamily, params.taskVariant, params.condition) ? params : null;
++    if (!received) received = true;
++    if (!validParams) {
++      if (sentViewReady) target.parent.postMessage(viewMessage('@REVISIT_COMMS/VIEW_NOT_READY'), origin!);
++      acceptedParams = null;
++      sentViewReady = false;
++      callback?.(null);
++      return;
++    }
++    const sameTrial = acceptedParams !== null && acceptedParams.trialId === validParams.trialId
++      && acceptedParams.scenarioFamily === validParams.scenarioFamily
++      && acceptedParams.taskVariant === validParams.taskVariant
++      && acceptedParams.condition === validParams.condition
++      && acceptedParams.stimulusSeed === validParams.stimulusSeed;
++    if (!sameTrial && sentViewReady) {
++      target.parent.postMessage(viewMessage('@REVISIT_COMMS/VIEW_NOT_READY'), origin!);
++      sentViewReady = false;
++    }
++    acceptedParams = validParams;
++    callback?.(validParams);
++    if (sameTrial && sentViewReady) target.parent.postMessage(viewMessage('@REVISIT_COMMS/VIEW_READY'), origin!);
++  };
++  return {
++    enabled,
++    start(onParams: (params: VisualizationParams | null) => void) {
++      if (!enabled || started) return;
++      started = true;
++      callback = onParams;
++      target.addEventListener('message', receive);
++      target.parent.postMessage({ error: false, type: '@REVISIT_COMMS/WINDOW_READY', iframeId: id, message: {} }, origin!);
++    },
++    viewReady() {
++      if (!enabled || !received || !acceptedParams || sentViewReady) return;
++      sentViewReady = true;
++      target.parent.postMessage(viewMessage('@REVISIT_COMMS/VIEW_READY'), origin!);
++    },
++    viewNotReady() {
++      if (!enabled || !received || !acceptedParams) return;
++      sentViewReady = false;
++      target.parent.postMessage(viewMessage('@REVISIT_COMMS/VIEW_NOT_READY'), origin!);
++    },
++    dispose() { target.removeEventListener('message', receive); },
++  };
++}
+diff --git a/study/tests/visualization-contract.test.ts b/study/tests/visualization-contract.test.ts
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/study/tests/visualization-contract.test.ts
+@@ -0,0 +1,96 @@
++import { describe, expect, it, vi } from 'vitest';
++import { createVisualizationHandshake, parseVisualizationParams } from '../src/visualizationContract';
++
++const validParams = {
++  contractVersion: 1, trialId: 'conflict-A-recommended', scenarioFamily: 'conflict',
++  taskVariant: 'A', condition: 'recommended', stimulusSeed: 271828,
++};
++
++describe('visualization iframe contract', () => {
++  it('accepts only contract version 1 and the fixed synthetic seed', () => {
++    expect(parseVisualizationParams(validParams)).toEqual(validParams);
++    expect(parseVisualizationParams({ ...validParams, contractVersion: '2' })).toBeNull();
++    expect(parseVisualizationParams({ ...validParams, contractVersion: '1' })).toBeNull();
++    expect(parseVisualizationParams({ ...validParams, stimulusSeed: 1 })).toBeNull();
++    expect(parseVisualizationParams({ ...validParams, unexpected: true })).toBeNull();
++  });
++
++  it('requires trusted origin/source and iframe correlation, then posts exact VIEW_READY host correlation', () => {
++    const listener = vi.fn();
++    const parent = { postMessage: vi.fn() };
++    const target = {
++      parent,
++      addEventListener: vi.fn((_type: string, callback: (event: MessageEvent) => void) => listener.mockImplementation(callback)),
++      removeEventListener: vi.fn(),
++    } as unknown as Window;
++    const ready = vi.fn();
++    const bridge = createVisualizationHandshake(
++      { search: '?id=widget&trialid=host-component-07&parentOrigin=https%3A%2F%2Fhost.example' } as Location,
++      target, 'https://host.example/page', ['https://host.example'],
++    );
++    bridge.start(ready);
++    expect(parent.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: '@REVISIT_COMMS/WINDOW_READY', iframeId: 'widget' }), 'https://host.example');
++    bridge.viewReady();
++    expect(parent.postMessage).toHaveBeenCalledTimes(1);
++    const send = (origin: string, source: Window, message: unknown) => listener({ origin, source, data: { error: false, iframeId: 'widget', type: '@REVISIT_COMMS/STUDY_DATA', message } } as MessageEvent);
++    send('https://attacker.example', parent as unknown as Window, validParams);
++    send('https://host.example', {} as Window, validParams);
++    expect(ready).not.toHaveBeenCalled();
++    send('https://host.example', parent as unknown as Window, validParams);
++    expect(ready).toHaveBeenCalledWith(validParams);
++    bridge.viewReady();
++    expect(parent.postMessage).toHaveBeenLastCalledWith({
++      error: false,
++      type: '@REVISIT_COMMS/VIEW_READY',
++      iframeId: 'widget',
++      message: { contractVersion: 1, trialId: 'host-component-07' },
++    }, 'https://host.example');
++    bridge.viewReady();
++    expect(parent.postMessage).toHaveBeenCalledTimes(2);
++    send('https://host.example', parent as unknown as Window, validParams);
++    expect(ready).toHaveBeenCalledTimes(2);
++    expect(parent.postMessage).toHaveBeenLastCalledWith({
++      error: false,
++      type: '@REVISIT_COMMS/VIEW_READY',
++      iframeId: 'widget',
++      message: { contractVersion: 1, trialId: 'host-component-07' },
++    }, 'https://host.example');
++    expect(parent.postMessage).toHaveBeenCalledTimes(3);
++    bridge.viewNotReady();
++    expect(parent.postMessage).toHaveBeenLastCalledWith({
++      error: false,
++      type: '@REVISIT_COMMS/VIEW_NOT_READY',
++      iframeId: 'widget',
++      message: { contractVersion: 1, trialId: 'host-component-07' },
++    }, 'https://host.example');
++    bridge.viewReady();
++    expect(parent.postMessage).toHaveBeenLastCalledWith({
++      error: false,
++      type: '@REVISIT_COMMS/VIEW_READY',
++      iframeId: 'widget',
++      message: { contractVersion: 1, trialId: 'host-component-07' },
++    }, 'https://host.example');
++    bridge.dispose();
++  });
++
++  it('reports a trusted but invalid or mismatched payload for visible failure handling', () => {
++    const listener = vi.fn();
++    const parent = { postMessage: vi.fn() };
++    const target = {
++      parent,
++      addEventListener: vi.fn((_type: string, callback: (event: MessageEvent) => void) => listener.mockImplementation(callback)),
++      removeEventListener: vi.fn(),
++    } as unknown as Window;
++    const received = vi.fn();
++    const bridge = createVisualizationHandshake(
++      { search: '?id=widget&trialid=host-component-07&parentOrigin=https%3A%2F%2Fhost.example' } as Location,
++      target, 'https://host.example/page', ['https://host.example'],
++    );
++    bridge.start(received);
++    listener({ origin: 'https://host.example', source: parent as unknown as Window, data: {
++      error: false, iframeId: 'widget', type: '@REVISIT_COMMS/STUDY_DATA', message: { ...validParams, trialId: 'conflict-B-recommended' },
++    } } as MessageEvent);
++    expect(received).toHaveBeenCalledWith(null);
++    bridge.dispose();
++  });
++});
+diff --git a/study/tests/visualization-app.test.tsx b/study/tests/visualization-app.test.tsx
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/study/tests/visualization-app.test.tsx
+@@ -0,0 +1,122 @@
++import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
++import { useEffect } from 'react';
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import type { VisualizationParams } from '../src/visualizationContract';
++import { VisualizationApp } from '../src/VisualizationApp';
++
++const mocks = vi.hoisted(() => ({
++  onParams: null as ((params: VisualizationParams | null) => void) | null,
++  viewReady: vi.fn(),
++  viewNotReady: vi.fn(),
++  chartInstances: [] as Array<{ onReady?: () => void; onError?: () => void; title: string }>,
++}));
++
++vi.mock('../src/visualizationContract', () => ({
++  createVisualizationHandshake: () => ({
++    enabled: true,
++    start: (callback: (params: VisualizationParams | null) => void) => { mocks.onParams = callback; },
++    viewReady: mocks.viewReady,
++    viewNotReady: mocks.viewNotReady,
++    dispose: vi.fn(),
++  }),
++}));
++
++vi.mock('../src/studyModel', () => ({
++  containsTextMark: (spec: Record<string, unknown>) => spec.mark === 'text',
++  getScenarioView: () => ({
++    data: { sources: [], reports: [], locations: [], provenance: [], model_outputs: [] },
++    reports: [], recommendations: [
++      { id: 'chart-one', title: 'Chart one', technique: 'line', rationale: ['Rationale one'], doesNotEstablish: 'Caveat', vegaLiteSpec: { mark: 'line' } },
++      { id: 'chart-two', title: 'Chart two', technique: 'line', rationale: ['Rationale two'], doesNotEstablish: 'Caveat', vegaLiteSpec: { mark: 'line' } },
++    ],
++    analysis: new Map(), salience: new Map(), modeling: {},
++  }),
++}));
++
++vi.mock('../../src/components/charts/VegaChart', () => ({
++  VegaChart: ({ onReady, onError, ariaLabel }: { onReady?: () => void; onError?: () => void; ariaLabel: string }) => {
++    useEffect(() => {
++      mocks.chartInstances.push({ onReady, onError, title: ariaLabel });
++    }, []);
++    return <div>
++      <button type="button" onClick={onReady}>Resolve {ariaLabel}</button>
++      <button type="button" onClick={onError}>Fail {ariaLabel}</button>
++    </div>;
++  },
++}));
++
++vi.mock('../../src/components/charts/SituationEvidenceViews', () => ({
++  FictionalGridPlot: () => <div />,
++  ObservationTimeline: () => <div />,
++  ReportComparisonTable: () => <div />,
++}));
++vi.mock('../../src/components/details/EvidencePanel', () => ({ EvidencePanel: () => <div /> }));
++
++const firstTrial: VisualizationParams = {
++  contractVersion: 1, trialId: 'conflict-A-recommended', scenarioFamily: 'conflict',
++  taskVariant: 'A', condition: 'recommended', stimulusSeed: 271828,
++};
++
++function secondTrial(): VisualizationParams {
++  return { ...firstTrial, trialId: 'quality-B-recommended', scenarioFamily: 'quality', taskVariant: 'B' };
++}
++
++function deliver(params: VisualizationParams | null) {
++  act(() => mocks.onParams?.(params));
++}
++
++describe('VisualizationApp readiness lifecycle', () => {
++  beforeEach(() => {
++    window.history.replaceState({}, '', '/visualization.html?id=widget&trialid=host-component&parentOrigin=https%3A%2F%2Fhost.example');
++    mocks.onParams = null;
++    mocks.chartInstances.length = 0;
++    mocks.viewReady.mockClear();
++    mocks.viewNotReady.mockClear();
++  });
++  afterEach(cleanup);
++
++  it('ignores a stale prior-trial chart callback and mounts a new generation', async () => {
++    render(<VisualizationApp />);
++    await waitFor(() => expect(mocks.onParams).toBeTypeOf('function'));
++    deliver(firstTrial);
++    await waitFor(() => expect(mocks.chartInstances).toHaveLength(1));
++    const oldChart = mocks.chartInstances[0];
++    deliver(secondTrial());
++    await waitFor(() => expect(mocks.chartInstances).toHaveLength(2));
++    act(() => oldChart.onReady?.());
++    expect(mocks.viewReady).not.toHaveBeenCalled();
++    fireEvent.click(screen.getByRole('button', { name: /Resolve Task-aware recommended Chart one/ }));
++    await waitFor(() => expect(mocks.viewReady).toHaveBeenCalledTimes(1));
++  });
++
++  it('remounts cached specs after recommendation changes and only accepts the current chart completion', async () => {
++    render(<VisualizationApp />);
++    await waitFor(() => expect(mocks.onParams).toBeTypeOf('function'));
++    deliver(firstTrial);
++    await waitFor(() => expect(mocks.chartInstances).toHaveLength(1));
++    const initial = mocks.chartInstances[0];
++    fireEvent.click(screen.getByRole('button', { name: /Resolve Task-aware recommended Chart one/ }));
++    await waitFor(() => expect(mocks.viewReady).toHaveBeenCalledTimes(1));
++    fireEvent.change(screen.getByLabelText('Select visualization'), { target: { value: 'chart-two' } });
++    await waitFor(() => expect(mocks.chartInstances).toHaveLength(2));
++    expect(mocks.viewNotReady).toHaveBeenCalledTimes(1);
++    act(() => initial.onReady?.());
++    expect(mocks.viewReady).toHaveBeenCalledTimes(1);
++    fireEvent.click(screen.getByRole('button', { name: /Resolve Task-aware recommended Chart two/ }));
++    await waitFor(() => expect(mocks.viewReady).toHaveBeenCalledTimes(2));
++  });
++
++  it('clears invalid-data errors on valid recovery and withholds ready on async chart failure', async () => {
++    render(<VisualizationApp />);
++    await waitFor(() => expect(mocks.onParams).toBeTypeOf('function'));
++    deliver(null);
++    expect(screen.getByRole('alert')).toHaveTextContent('invalid or mismatched');
++    deliver(firstTrial);
++    await waitFor(() => expect(mocks.chartInstances).toHaveLength(1));
++    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
++    fireEvent.click(screen.getByRole('button', { name: /Fail Task-aware recommended Chart one/ }));
++    expect(mocks.viewNotReady).toHaveBeenCalledTimes(1);
++    expect(screen.getByRole('alert')).toHaveTextContent('could not be rendered');
++    expect(mocks.viewReady).not.toHaveBeenCalled();
++  });
++});

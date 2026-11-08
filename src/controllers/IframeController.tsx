@@ -18,10 +18,17 @@ export function IframeController({ currentConfig, provState, answers }: { curren
   const storeDispatch = useStoreDispatch();
   const dispatch = useDispatch();
   const identifier = useCurrentIdentifier();
+  const currentComponent = useCurrentComponent();
   const isAnalysis = useIsAnalysis();
   const replay = useContext(ReplayContext);
   const initialReplayTime = useRef(replay?.seekTime ?? 0);
   const [hasReplayStarted, setHasReplayStarted] = useState(false);
+  const isVisualizationTrial = !/^https?:\/\//i.test(currentConfig.path)
+    && /(?:^|\/)cedar-watch-pilot\/app\/visualization\.html$/i.test(currentConfig.path)
+    && currentConfig.parameters?.contractVersion === 1
+    && typeof currentConfig.parameters?.trialId === 'string';
+  const [readiness, setReadiness] = useState<{ generation: string; ready: boolean }>({ generation: '', ready: false });
+  const [iframeFailed, setIframeFailed] = useState(false);
   const stimulusValidation = useStoreSelector((state) => state.trialValidation[identifier]?.stimulus);
   const existingReactiveAnswers = useStoreSelector((state) => state.reactiveAnswers);
 
@@ -46,12 +53,13 @@ export function IframeController({ currentConfig, provState, answers }: { curren
   }, [existingReactiveAnswers]);
 
   const iframeId = useMemo(
-    () => (crypto.randomUUID ? crypto.randomUUID() : `testID-${Date.now()}`),
-    [],
+    () => (crypto.randomUUID
+      ? crypto.randomUUID()
+      : `testID-${identifier}-${currentComponent}-${currentConfig.path}-${Date.now()}`),
+    [identifier, currentComponent, currentConfig.path],
   );
 
   // navigation
-  const currentComponent = useCurrentComponent();
   const currentComponentAnswers = useMemo(() => {
     const stored = answers?.[identifier]?.answer;
     if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return undefined;
@@ -76,6 +84,17 @@ export function IframeController({ currentConfig, provState, answers }: { curren
     return resolved;
   }, [currentConfig.path, currentComponent, iframeId]);
   const expectedOrigin = iframeUrl.origin;
+  const readinessGeneration = `${identifier}|${currentComponent}|${iframeUrl.href}`;
+  const viewReady = !isVisualizationTrial
+    || (readiness.generation === readinessGeneration && readiness.ready);
+
+  useEffect(() => {
+    if (!isVisualizationTrial) return undefined;
+    storeDispatch(updateResponseBlockValidation({
+      location: 'stimulus', identifier, status: false, values: {},
+    }));
+    return undefined;
+  }, [iframeUrl, identifier, isVisualizationTrial, storeDispatch, updateResponseBlockValidation]);
 
   const isCompletePilotSession = useCallback((message: unknown) => {
     if (!message || typeof message !== 'object' || Array.isArray(message)) return false;
@@ -165,6 +184,27 @@ export function IframeController({ currentConfig, provState, answers }: { curren
     [ref, iframeId, expectedOrigin],
   );
 
+  const markIframeLoading = useCallback(() => {
+    if (!isVisualizationTrial) return;
+    setReadiness({ generation: readinessGeneration, ready: false });
+    setIframeFailed(false);
+    storeDispatch(updateResponseBlockValidation({
+      location: 'stimulus', identifier, status: false, values: {},
+    }));
+    // The child may have sent VIEW_READY before the iframe load event. Re-send
+    // STUDY_DATA after every load; the child reports readiness after processing it.
+    sendMessage('STUDY_DATA', currentConfig.parameters ?? {});
+  }, [currentConfig.parameters, identifier, isVisualizationTrial, readinessGeneration, sendMessage, storeDispatch, updateResponseBlockValidation]);
+
+  const markIframeFailed = useCallback(() => {
+    if (!isVisualizationTrial) return;
+    setReadiness({ generation: readinessGeneration, ready: false });
+    setIframeFailed(true);
+    storeDispatch(updateResponseBlockValidation({
+      location: 'stimulus', identifier, status: false, values: {},
+    }));
+  }, [identifier, isVisualizationTrial, readinessGeneration, storeDispatch, updateResponseBlockValidation]);
+
   useEffect(() => {
     if (provState && shouldSendProvenance) {
       sendMessage('PROVENANCE', provState);
@@ -188,10 +228,28 @@ export function IframeController({ currentConfig, provState, answers }: { curren
               sendMessage('PROVENANCE', provState);
             }
             break;
+          case `${PREFIX}/VIEW_READY`:
+            if (isVisualizationTrial && data.error === false && data.message?.contractVersion === 1
+              && data.message?.trialId === currentComponent) {
+              setReadiness({ generation: readinessGeneration, ready: true });
+              setIframeFailed(false);
+            }
+            break;
+          case `${PREFIX}/VIEW_NOT_READY`:
+            if (isVisualizationTrial && data.error === false && data.message?.contractVersion === 1
+              && data.message?.trialId === currentComponent) {
+              setReadiness({ generation: readinessGeneration, ready: false });
+              storeDispatch(updateResponseBlockValidation({
+                location: 'stimulus', identifier, status: false, values: {},
+              }));
+            }
+            break;
           case `${PREFIX}/READY`:
             break;
           case `${PREFIX}/ANSWERS`: {
             if (isAnalysis) return;
+            // These trials are host-owned; iframe-supplied answers are never authoritative.
+            if (isVisualizationTrial) return;
             if (!data.message || typeof data.message !== 'object' || Array.isArray(data.message)) return;
             if (isPilotStudy) {
               if (!isCompletePilotSession(data.message)) return;
@@ -232,20 +290,37 @@ export function IframeController({ currentConfig, provState, answers }: { curren
     window.addEventListener('message', handler);
 
     return () => window.removeEventListener('message', handler);
-  }, [storeDispatch, dispatch, iframeId, currentConfig, sendMessage, setReactiveAnswers, updateProvenance, updateResponseBlockValidation, identifier, isAnalysis, provState, shouldSendProvenance, expectedOrigin, isCompletePilotSession, existingReactiveAnswers, isPilotStudy, currentComponentAnswers]);
+  }, [storeDispatch, dispatch, iframeId, currentConfig, sendMessage, setReactiveAnswers, updateProvenance, updateResponseBlockValidation, identifier, isAnalysis, provState, shouldSendProvenance, expectedOrigin, isCompletePilotSession, existingReactiveAnswers, isPilotStudy, currentComponentAnswers, isVisualizationTrial, currentComponent, readinessGeneration]);
+
+  useEffect(() => {
+    if (isVisualizationTrial && viewReady) {
+      storeDispatch(updateResponseBlockValidation({
+        location: 'stimulus', identifier, status: true, values: {},
+      }));
+    }
+  }, [identifier, isVisualizationTrial, storeDispatch, updateResponseBlockValidation, viewReady]);
 
   return (
-    <iframe
-      ref={ref}
-      inert={(isAnalysis ? '' : undefined) as never}
-      aria-disabled={isAnalysis}
-      style={{
-        width: '100%',
-        flexGrow: 1,
-        border: 0,
-        pointerEvents: isAnalysis ? 'none' : undefined,
-      }}
-      src={/^https?:\/\//i.test(currentConfig.path) ? iframeUrl.toString() : `${iframeUrl.pathname}${iframeUrl.search}`}
-    />
+    <>
+      {isVisualizationTrial && !viewReady && (
+        <div role={iframeFailed ? 'alert' : 'status'}>
+          {iframeFailed ? 'The visualization could not be loaded. Reload the page to try again.' : 'Waiting for the visualization to be ready. Reload the page if this takes too long.'}
+        </div>
+      )}
+      <iframe
+        ref={ref}
+        onLoad={markIframeLoading}
+        onError={markIframeFailed}
+        inert={(isAnalysis ? '' : undefined) as never}
+        aria-disabled={isAnalysis}
+        style={{
+          width: '100%',
+          flexGrow: 1,
+          border: 0,
+          pointerEvents: isAnalysis ? 'none' : undefined,
+        }}
+        src={/^https?:\/\//i.test(currentConfig.path) ? iframeUrl.toString() : `${iframeUrl.pathname}${iframeUrl.search}`}
+      />
+    </>
   );
 }

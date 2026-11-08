@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, waitFor } from '@testing-library/react';
+import {
+  cleanup, fireEvent, render, waitFor,
+} from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
   afterEach, beforeEach, describe, expect, test, vi,
@@ -14,14 +16,15 @@ const mockSetReactiveAnswers = vi.fn((payload) => ({ type: 'setReactiveAnswers',
 const mockUpdateProvenance = vi.fn((payload) => ({ type: 'updateProvenance', payload }));
 const mockUpdateResponseBlockValidation = vi.fn((payload) => ({ type: 'updateResponseBlockValidation', payload }));
 const mockIsAnalysis = { value: false };
+const mockCurrent = { component: 'countDots', identifier: 'countDots_0' };
 
 vi.mock('react-redux', () => ({
   useDispatch: () => vi.fn(),
 }));
 
 vi.mock('../../routes/utils', () => ({
-  useCurrentComponent: () => 'countDots',
-  useCurrentIdentifier: () => 'countDots_0',
+  useCurrentComponent: () => mockCurrent.component,
+  useCurrentIdentifier: () => mockCurrent.identifier,
 }));
 
 vi.mock('../../store/hooks/useIsAnalysis', () => ({
@@ -49,6 +52,8 @@ describe('IframeController', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockIsAnalysis.value = false;
+    mockCurrent.component = 'countDots';
+    mockCurrent.identifier = 'countDots_0';
   });
 
   afterEach(() => {
@@ -57,6 +62,12 @@ describe('IframeController', () => {
   });
 
   const websiteConfig: WebsiteComponent = { type: 'website', path: 'https://example.com', response: [{ id: 'q1' } as never] };
+  const cedarVisualizationConfig = (response: WebsiteComponent['response'] = []) => ({
+    type: 'website' as const,
+    path: 'cedar-watch-pilot/app/visualization.html',
+    parameters: { contractVersion: 1, trialId: 'child-trial' },
+    response,
+  });
 
   const dispatchIframeMessage = (data: unknown, origin?: string) => {
     const iframe = document.querySelector('iframe');
@@ -65,6 +76,18 @@ describe('IframeController', () => {
       origin: origin ?? (iframe ? new URL(iframe.src).origin : window.location.origin),
       source: iframe?.contentWindow,
     }));
+  };
+
+  const dispatchViewMessage = (
+    tag: 'VIEW_READY' | 'VIEW_NOT_READY',
+    message: { contractVersion: number; trialId: string },
+    error = false,
+    origin?: string,
+    iframeId = '11111111-2222-3333-4444-555555555555',
+  ) => {
+    dispatchIframeMessage({
+      iframeId, error, message, type: `@REVISIT_COMMS/${tag}`,
+    }, origin);
   };
 
   test('covers sendMessage via answers effect on mount', async () => {
@@ -125,6 +148,160 @@ describe('IframeController', () => {
     render(<IframeController currentConfig={websiteWithParams} answers={{}} />);
     dispatchIframeMessage({ iframeId: '11111111-2222-3333-4444-555555555555', type: '@REVISIT_COMMS/WINDOW_READY' });
     // sendMessage called with STUDY_DATA; ref.current.contentWindow.postMessage fires
+  });
+
+  test('accepts VIEW_READY only for the matching visualization trial and contract', async () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('11111111-2222-3333-4444-555555555555' as `${string}-${string}-${string}-${string}-${string}`);
+    render(<IframeController currentConfig={cedarVisualizationConfig()} answers={{}} />);
+    expect(mockUpdateResponseBlockValidation).toHaveBeenCalledWith(expect.objectContaining({ status: false }));
+    dispatchViewMessage('VIEW_READY', { contractVersion: 2, trialId: 'countDots' });
+    expect(mockUpdateResponseBlockValidation).not.toHaveBeenCalledWith(expect.objectContaining({ status: true }));
+    dispatchViewMessage('VIEW_READY', { contractVersion: 1, trialId: 'wrong' });
+    expect(mockUpdateResponseBlockValidation).not.toHaveBeenCalledWith(expect.objectContaining({ status: true }));
+    dispatchViewMessage('VIEW_READY', { contractVersion: 1, trialId: 'countDots' });
+    await waitFor(() => expect(mockUpdateResponseBlockValidation).toHaveBeenCalledWith(expect.objectContaining({ status: true })));
+  });
+
+  test('does not gate unrelated website paths that happen to end in visualization.html', () => {
+    render(
+      <IframeController
+        currentConfig={{
+          type: 'website',
+          path: 'other-study/visualization.html',
+          response: [{ id: 'q1' } as never],
+        }}
+        answers={{}}
+      />,
+    );
+    expect(mockUpdateResponseBlockValidation).not.toHaveBeenCalled();
+    dispatchIframeMessage({
+      iframeId: new URL(document.querySelector('iframe')!.src).searchParams.get('id'),
+      type: '@REVISIT_COMMS/ANSWERS',
+      message: { q1: 'generic behavior retained' },
+    });
+    expect(mockSetReactiveAnswers).toHaveBeenCalledWith({ prior: 'kept', q1: 'generic behavior retained' });
+  });
+
+  test('does not gate Cedar Watch paths that do not declare readiness contract version 1', () => {
+    render(
+      <IframeController
+        currentConfig={{
+          ...cedarVisualizationConfig(),
+          parameters: { contractVersion: 2, trialId: 'child-trial' },
+        }}
+        answers={{}}
+      />,
+    );
+    expect(mockUpdateResponseBlockValidation).not.toHaveBeenCalled();
+  });
+
+  test('scopes readiness atomically to the current identifier and iframe correlation ID', async () => {
+    vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce('11111111-2222-3333-4444-555555555555' as `${string}-${string}-${string}-${string}-${string}`)
+      .mockReturnValueOnce('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' as `${string}-${string}-${string}-${string}-${string}`);
+    const config = cedarVisualizationConfig();
+    const { rerender } = render(<IframeController currentConfig={config} answers={{}} />);
+    const oldFrameId = new URL(document.querySelector('iframe')!.src).searchParams.get('id')!;
+    dispatchViewMessage('VIEW_READY', { contractVersion: 1, trialId: 'countDots' }, false, undefined, oldFrameId);
+    await waitFor(() => expect(mockUpdateResponseBlockValidation).toHaveBeenCalledWith(expect.objectContaining({
+      identifier: 'countDots_0', status: true,
+    })));
+
+    vi.clearAllMocks();
+    mockCurrent.identifier = 'countDots_1';
+    rerender(<IframeController currentConfig={config} answers={{}} />);
+    const newFrameId = new URL(document.querySelector('iframe')!.src).searchParams.get('id')!;
+    expect(newFrameId).not.toBe(oldFrameId);
+    expect(mockUpdateResponseBlockValidation).toHaveBeenCalledWith(expect.objectContaining({
+      identifier: 'countDots_1', status: false,
+    }));
+    expect(mockUpdateResponseBlockValidation).not.toHaveBeenCalledWith(expect.objectContaining({
+      identifier: 'countDots_1', status: true,
+    }));
+
+    dispatchViewMessage('VIEW_READY', { contractVersion: 1, trialId: 'countDots' }, false, undefined, oldFrameId);
+    expect(mockUpdateResponseBlockValidation).not.toHaveBeenCalledWith(expect.objectContaining({
+      identifier: 'countDots_1', status: true,
+    }));
+    dispatchViewMessage('VIEW_READY', { contractVersion: 1, trialId: 'countDots' }, false, undefined, newFrameId);
+    await waitFor(() => expect(mockUpdateResponseBlockValidation).toHaveBeenCalledWith(expect.objectContaining({
+      identifier: 'countDots_1', status: true,
+    })));
+  });
+
+  test('rejects iframe ANSWERS even after readiness and requires readiness after reload', async () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('11111111-2222-3333-4444-555555555555' as `${string}-${string}-${string}-${string}-${string}`);
+    const { container } = render(<IframeController currentConfig={cedarVisualizationConfig([{ id: 'q1' } as never])} answers={{}} />);
+    const iframe = container.querySelector('iframe')!;
+    const iframeId = '11111111-2222-3333-4444-555555555555';
+
+    dispatchIframeMessage({ iframeId, type: '@REVISIT_COMMS/ANSWERS', message: { q1: 'early' } });
+    expect(mockSetReactiveAnswers).not.toHaveBeenCalled();
+
+    dispatchViewMessage('VIEW_READY', { contractVersion: 1, trialId: 'countDots' });
+    dispatchIframeMessage({ iframeId, type: '@REVISIT_COMMS/ANSWERS', message: { q1: 'ready' } });
+    expect(mockSetReactiveAnswers).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    dispatchViewMessage('VIEW_READY', { contractVersion: 1, trialId: 'countDots' });
+    await waitFor(() => expect(mockUpdateResponseBlockValidation).toHaveBeenCalledWith(expect.objectContaining({ status: true })));
+    vi.clearAllMocks();
+    const postMessage = vi.spyOn(iframe.contentWindow!, 'postMessage').mockImplementation(() => {});
+    fireEvent.load(iframe);
+    expect(mockUpdateResponseBlockValidation).toHaveBeenCalledWith(expect.objectContaining({ status: false }));
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: '@REVISIT_COMMS/STUDY_DATA',
+      message: { contractVersion: 1, trialId: 'child-trial' },
+    }), window.location.origin);
+    dispatchIframeMessage({ iframeId, type: '@REVISIT_COMMS/ANSWERS', message: { q1: 'after-reload-before-ready' } });
+    expect(mockSetReactiveAnswers).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="status"]')).not.toBeNull();
+
+    dispatchViewMessage('VIEW_READY', { contractVersion: 1, trialId: 'countDots' });
+    await waitFor(() => expect(mockUpdateResponseBlockValidation).toHaveBeenCalledWith(expect.objectContaining({ status: true })));
+    dispatchIframeMessage({ iframeId, type: '@REVISIT_COMMS/ANSWERS', message: { q1: 'still-rejected' } });
+    expect(mockSetReactiveAnswers).not.toHaveBeenCalled();
+  });
+
+  test('resends STUDY_DATA on iframe load and reopens readiness after a ready-before-load race', async () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('11111111-2222-3333-4444-555555555555' as `${string}-${string}-${string}-${string}-${string}`);
+    const { container } = render(
+      <IframeController
+        currentConfig={{ ...cedarVisualizationConfig(), parameters: { ...cedarVisualizationConfig().parameters, hostValue: true } }}
+        answers={{}}
+      />,
+    );
+    const iframe = container.querySelector('iframe')!;
+    const postMessage = vi.spyOn(iframe.contentWindow!, 'postMessage').mockImplementation(() => {});
+    dispatchViewMessage('VIEW_READY', { contractVersion: 1, trialId: 'countDots' });
+    await waitFor(() => expect(mockUpdateResponseBlockValidation).toHaveBeenCalledWith(expect.objectContaining({ status: true })));
+    vi.clearAllMocks();
+    fireEvent.load(iframe);
+    expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: '@REVISIT_COMMS/STUDY_DATA',
+      message: expect.objectContaining({
+        contractVersion: 1, trialId: 'child-trial', hostValue: true,
+      }),
+    }), window.location.origin);
+    expect(mockUpdateResponseBlockValidation).toHaveBeenCalledWith(expect.objectContaining({ status: false }));
+  });
+
+  test('accepts VIEW_NOT_READY and VIEW_READY only with error false and matching correlation and trial', async () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('11111111-2222-3333-4444-555555555555' as `${string}-${string}-${string}-${string}-${string}`);
+    render(<IframeController currentConfig={cedarVisualizationConfig()} answers={{}} />);
+    dispatchViewMessage('VIEW_READY', { contractVersion: 1, trialId: 'countDots' }, true);
+    dispatchViewMessage('VIEW_READY', { contractVersion: 1, trialId: 'countDots' }, false, 'https://attacker.example');
+    expect(mockUpdateResponseBlockValidation).not.toHaveBeenCalledWith(expect.objectContaining({ status: true }));
+    dispatchViewMessage('VIEW_READY', { contractVersion: 1, trialId: 'countDots' });
+    await waitFor(() => expect(mockUpdateResponseBlockValidation).toHaveBeenCalledWith(expect.objectContaining({ status: true })));
+    vi.clearAllMocks();
+    dispatchViewMessage('VIEW_NOT_READY', { contractVersion: 1, trialId: 'countDots' }, true);
+    expect(mockUpdateResponseBlockValidation).not.toHaveBeenCalledWith(expect.objectContaining({ status: false }));
+    dispatchViewMessage('VIEW_NOT_READY', { contractVersion: 1, trialId: 'other' });
+    expect(mockUpdateResponseBlockValidation).not.toHaveBeenCalledWith(expect.objectContaining({ status: false }));
+    dispatchViewMessage('VIEW_NOT_READY', { contractVersion: 1, trialId: 'countDots' });
+    await waitFor(() => expect(mockUpdateResponseBlockValidation).toHaveBeenCalledWith(expect.objectContaining({ status: false })));
+    expect(document.querySelector('[role="status"]')).not.toBeNull();
   });
 
   test('renders iframe with the original src for an http path', () => {
