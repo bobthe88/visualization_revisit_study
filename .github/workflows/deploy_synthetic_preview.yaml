@@ -1,0 +1,54 @@
+name: Deploy Synthetic UI Preview
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-synthetic-preview:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: synthetic-preview-${{ github.ref }}
+      cancel-in-progress: true
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 22.16.0
+          cache: 'yarn'
+
+      - run: yarn install --immutable
+
+      - name: Build isolated synthetic-only preview
+        run: |
+          if [ "$GITHUB_REPOSITORY" = "$GITHUB_REPOSITORY_OWNER/$GITHUB_REPOSITORY_OWNER.github.io" ]; then
+            base_path="/"
+          else
+            base_path="/$GITHUB_REPOSITORY_NAME/"
+          fi
+          export VITE_BASE_PATH="$base_path"
+          export CEDAR_WATCH_BASE_PATH="${base_path%/}/cedar-watch-pilot/app/"
+          export CEDAR_WATCH_PARENT_ORIGINS="https://${GITHUB_REPOSITORY_OWNER,,}.github.io"
+          export CEDAR_WATCH_REQUIRE_PARENT_ORIGINS=true
+          export VITE_STORAGE_ENGINE=localStorage
+          yarn build:synthetic-preview
+        env:
+          GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
+          CEDAR_WATCH_SOURCE_COMMIT: 4b6927b12d212f139d003348b79c912a991bdb8b
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+      - name: Publish synthetic preview to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

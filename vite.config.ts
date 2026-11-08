@@ -6,11 +6,19 @@ import { coverageConfigDefaults } from 'vitest/config';
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd());
+  const syntheticPreview = mode === 'synthetic-preview';
 
   return {
     base: command === 'build' ? env.VITE_BASE_PATH : '/',
+    envPrefix: syntheticPreview ? ['VITE_BASE_PATH', 'VITE_STORAGE_ENGINE'] : 'VITE_',
     plugins: [
       react({ devTarget: 'es2022' }),
+      ...(syntheticPreview ? [{
+        name: 'synthetic-preview-warning',
+        transformIndexHtml(html: string) {
+          return html.replace('<div id="root"></div>', '<aside role="alert" style="position:sticky;top:0;z-index:2147483647;padding:12px 16px;background:#8b0000;color:#fff;font:700 16px/1.4 sans-serif;text-align:center">SYNTHETIC PREVIEW — NO PARTICIPANT DATA. Do not use this site for real participants or enter personal information. Data stays only in this browser.</aside><div id="root"></div>');
+        },
+      }] : []),
     ],
     resolve: {
       alias: {

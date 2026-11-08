@@ -4,7 +4,7 @@ set -eu
 source_repo="https://github.com/curentleaf/adaptive-visualization-recommender.git"
 source_commit="${CEDAR_WATCH_SOURCE_COMMIT:-4b6927b12d212f139d003348b79c912a991bdb8b}"
 patch_dir="$(pwd)/scripts"
-bridge_patches="$patch_dir/cedar-watch-revisit-bridge.patch $patch_dir/cedar-watch-loopback.patch $patch_dir/cedar-watch-tests.patch"
+bridge_patches="$patch_dir/cedar-watch-revisit-bridge.patch $patch_dir/cedar-watch-loopback.patch $patch_dir/cedar-watch-tests.patch $patch_dir/cedar-watch-testing-library.patch"
 checkout="${RUNNER_TEMP:-/tmp}/cedar-watch-${source_commit}"
 app_output="${checkout}/study/dist"
 output_root="${CEDAR_WATCH_PUBLIC_DIR:-public}"
@@ -118,7 +118,7 @@ done
 git -C "$checkout" diff --check
 overlay_hash="$(sha256sum $bridge_patches | awk '{print $1}' | sha256sum | cut -c1-16)"
 
-npm ci --prefix "$checkout/study"
+NPM_CONFIG_LEGACY_PEER_DEPS=true npm ci --legacy-peer-deps --prefix "$checkout/study"
 VITE_REVISIT_PARENT_ORIGINS="$parent_origins" npm --prefix "$checkout/study" run typecheck
 VITE_REVISIT_PARENT_ORIGINS="$parent_origins" npm --prefix "$checkout/study" test
 VITE_SOURCE_COMMIT="${source_commit}+bridge-${overlay_hash}" \
