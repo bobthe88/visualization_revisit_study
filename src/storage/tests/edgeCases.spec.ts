@@ -253,7 +253,7 @@ describe('StorageEngine edge cases', () => {
 
       // The failed asset key is recorded in failedAssetUploads
       // @ts-expect-error accessing private property for testing
-      expect(storageEngine.failedAssetUploads.has('audio/task1')).toBe(true);
+      expect(storageEngine.failedAssetUploads.has(`${storageEngine.currentParticipantId}/audio/task1`)).toBe(true);
 
       // This means finalizeParticipant returns an error status
       const result = await storageEngine.finalizeParticipant();
@@ -614,7 +614,7 @@ describe('StorageEngine edge cases', () => {
 
       // failedAssetUploads still contains the failed asset
       // @ts-expect-error accessing private property
-      expect(storageEngine.failedAssetUploads.has('screenRecording/task1')).toBe(true);
+      expect(storageEngine.failedAssetUploads.has(`${storageEngine.currentParticipantId}/screenRecording/task1`)).toBe(true);
 
       // finalizeParticipant should return non-complete because of the recorded failure
       // @ts-expect-error restore push for finalizeParticipant to work

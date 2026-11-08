@@ -180,8 +180,10 @@ export abstract class StorageEngine {
   protected participantDataWriteDelayMs = 3000;
 
   private pendingParticipantDataWrite:
-    | { participantId: string; snapshot: ParticipantData; cache: boolean }
+    | { participantId: string; snapshot: ParticipantData; cache: boolean; version: number }
     | undefined;
+
+  private participantDataWriteVersion = 0;
 
   private pendingParticipantDataWriteTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -190,6 +192,18 @@ export abstract class StorageEngine {
   private participantDataWriteError: Error | null = null;
 
   private participantDataWriteErrorListeners = new Set<(error: Error) => void>();
+
+  private participantCacheWriteChains = new Map<string, Promise<void>>();
+
+  private activeParticipantSaves = new Set<Promise<void>>();
+
+  private participantFinalizationChain: Promise<void> = Promise.resolve();
+
+  private participantFinalizationInProgress = false;
+
+  private participantRecordMutationChain: Promise<void> = Promise.resolve();
+
+  private participantRecordMutationsQueued = 0;
 
   private pendingAssetUploads = new Map<string, Promise<void>>();
 
@@ -398,14 +412,18 @@ export abstract class StorageEngine {
       return;
     }
 
-    try {
-      await this.participantStore.setItem(
-        this.getParticipantDataSnapshotStorageKey(targetParticipantId),
-        cloneParticipantDataSnapshot(snapshot),
-      );
-    } catch (error) {
-      console.warn('Failed to cache participant data locally:', error);
-    }
+    const key = this.getParticipantDataSnapshotStorageKey(targetParticipantId);
+    const previousWrite = this.participantCacheWriteChains.get(key) || Promise.resolve();
+    const cacheWrite = previousWrite
+      .catch(() => undefined)
+      .then(async () => {
+        await this.participantStore.setItem(key, cloneParticipantDataSnapshot(snapshot));
+      })
+      .catch((error) => {
+        console.warn('Failed to cache participant data locally:', error);
+      });
+    this.participantCacheWriteChains.set(key, cacheWrite);
+    await cacheWrite;
   }
 
   private async getCachedParticipantDataSnapshot(participantId?: string) {
@@ -415,6 +433,7 @@ export abstract class StorageEngine {
     }
 
     try {
+      await this.participantCacheWriteChains.get(this.getParticipantDataSnapshotStorageKey(targetParticipantId));
       const cachedParticipantData = await this.participantStore.getItem<ParticipantData>(
         this.getParticipantDataSnapshotStorageKey(targetParticipantId),
       );
@@ -512,15 +531,21 @@ export abstract class StorageEngine {
     return queuedWrite;
   }
 
-  private scheduleParticipantDataWrite(snapshot: ParticipantData, cache: boolean = false) {
-    if (!this.currentParticipantId) {
+  private scheduleParticipantDataWrite(
+    snapshot: ParticipantData,
+    cache: boolean = false,
+    participantId = this.currentParticipantId,
+  ) {
+    if (!participantId) {
       throw new Error('Participant not initialized');
     }
 
+    this.participantDataWriteVersion += 1;
     this.pendingParticipantDataWrite = {
-      participantId: this.currentParticipantId,
+      participantId,
       snapshot: cloneParticipantDataSnapshot(snapshot),
       cache,
+      version: this.participantDataWriteVersion,
     };
 
     this.clearPendingParticipantDataWriteTimer();
@@ -537,8 +562,35 @@ export abstract class StorageEngine {
         pendingWrite.participantId,
         pendingWrite.snapshot,
         pendingWrite.cache,
-      ).catch(() => undefined);
+      ).catch(() => {
+        this.restorePendingParticipantDataWrite(pendingWrite);
+      });
     }, this.participantDataWriteDelayMs);
+  }
+
+  private restorePendingParticipantDataWrite(
+    pendingWrite: NonNullable<typeof this.pendingParticipantDataWrite>,
+  ) {
+    if (!this.pendingParticipantDataWrite && pendingWrite.version === this.participantDataWriteVersion) {
+      this.pendingParticipantDataWrite = pendingWrite;
+    }
+  }
+
+  private invalidatePendingParticipantDataWrite(participantId: string) {
+    if (this.pendingParticipantDataWrite?.participantId === participantId) {
+      this.clearPendingParticipantDataWriteTimer();
+      this.pendingParticipantDataWrite = undefined;
+      this.participantDataWriteVersion += 1;
+    }
+  }
+
+  private serializeParticipantRecordMutation<T>(operation: () => Promise<T>) {
+    this.participantRecordMutationsQueued += 1;
+    const mutation = this.participantRecordMutationChain.then(operation);
+    this.participantRecordMutationChain = mutation.then(() => undefined, () => undefined);
+    return mutation.finally(() => {
+      this.participantRecordMutationsQueued -= 1;
+    });
   }
 
   protected async persistCurrentParticipantData(
@@ -548,20 +600,32 @@ export abstract class StorageEngine {
       throw new Error('Participant not initialized');
     }
 
+    const participantId = this.currentParticipantId;
     const snapshot = cloneParticipantDataSnapshot(this.participantData);
     const { immediate = false, cache = false } = options;
 
-    await this.cacheParticipantDataSnapshot(snapshot, this.currentParticipantId);
+    if (immediate) {
+      this.clearPendingParticipantDataWriteTimer();
+      this.participantDataWriteVersion += 1;
+      this.pendingParticipantDataWrite = {
+        participantId,
+        snapshot,
+        cache,
+        version: this.participantDataWriteVersion,
+      };
+    } else {
+      this.scheduleParticipantDataWrite(snapshot, cache, participantId);
+    }
+    await this.cacheParticipantDataSnapshot(snapshot, participantId);
     await this.verifyStudyDatabase();
 
     if (!immediate) {
-      this.scheduleParticipantDataWrite(snapshot, cache);
       return;
     }
 
-    this.clearPendingParticipantDataWriteTimer();
-    this.pendingParticipantDataWrite = undefined;
-    await this.enqueueParticipantDataWrite(this.currentParticipantId, snapshot, cache);
+    // Flush even if superseded: the replacement snapshot owns the pending slot
+    // and must reach the backend before this immediate call reports success.
+    await this.flushPendingParticipantData();
   }
 
   async flushPendingParticipantData() {
@@ -570,11 +634,16 @@ export abstract class StorageEngine {
     if (this.pendingParticipantDataWrite) {
       const pendingWrite = this.pendingParticipantDataWrite;
       this.pendingParticipantDataWrite = undefined;
-      await this.enqueueParticipantDataWrite(
-        pendingWrite.participantId,
-        pendingWrite.snapshot,
-        pendingWrite.cache,
-      );
+      try {
+        await this.enqueueParticipantDataWrite(
+          pendingWrite.participantId,
+          pendingWrite.snapshot,
+          pendingWrite.cache,
+        );
+      } catch (error) {
+        this.restorePendingParticipantDataWrite(pendingWrite);
+        throw error;
+      }
     }
 
     await this.participantDataWriteChain;
@@ -620,8 +689,11 @@ export abstract class StorageEngine {
     this.failedAssetUploads.delete(assetKey);
   }
 
-  private getAssetUploadError() {
-    return this.failedAssetUploads.values().next().value || null;
+  private getAssetUploadError(participantId?: string) {
+    const entry = [...this.failedAssetUploads.entries()].find(([key]) => (
+      !participantId || key.startsWith(`${participantId}/`)
+    ));
+    return entry?.[1] || null;
   }
 
   private noteAssetUploadActivity() {
@@ -656,7 +728,11 @@ export abstract class StorageEngine {
     return operationPromise;
   }
 
-  private async waitForPendingAssetUploads(): Promise<Error | null> {
+  private getParticipantAssetKey(participantId: string, assetKey: string) {
+    return `${participantId}/${assetKey}`;
+  }
+
+  private async waitForPendingAssetUploads(participantId?: string): Promise<Error | null> {
     const uploadPromises = [
       ...this.pendingAssetUploads.values(),
       ...this.pendingAssetOperations,
@@ -670,15 +746,15 @@ export abstract class StorageEngine {
         && this.pendingAssetOperations.size === 0
         && this.assetUploadActivityVersion === activityVersion
       ) {
-        return this.getAssetUploadError();
+        return this.getAssetUploadError(participantId);
       }
 
-      return this.waitForPendingAssetUploads();
+      return this.waitForPendingAssetUploads(participantId);
     }
 
     await Promise.allSettled(uploadPromises);
 
-    return this.waitForPendingAssetUploads();
+    return this.waitForPendingAssetUploads(participantId);
   }
 
   async getStageData(studyId: string): Promise<StageData> {
@@ -969,6 +1045,12 @@ export abstract class StorageEngine {
   ) {
     await this.verifyStudyDatabase();
 
+    if (urlParticipantId && this.currentParticipantId && urlParticipantId !== this.currentParticipantId) {
+      await this.participantFinalizationChain;
+      await Promise.all([...this.activeParticipantSaves]);
+      await this.flushPendingParticipantData();
+    }
+
     // Ensure that we have a participantId
     await this.getCurrentParticipantId(urlParticipantId);
     if (!this.currentParticipantId) {
@@ -1136,6 +1218,10 @@ export abstract class StorageEngine {
 
   // Adds a participant tag to the current participant.
   async addParticipantTags(tags: string[]) {
+    return this.serializeParticipantRecordMutation(() => this.addParticipantTagsOnce(tags));
+  }
+
+  private async addParticipantTagsOnce(tags: string[]) {
     await this.verifyStudyDatabase();
     if (!this.participantData) {
       throw new Error('Participant data not initialized');
@@ -1147,6 +1233,10 @@ export abstract class StorageEngine {
 
   // Removes participant tags from the current participant.
   async removeParticipantTags(tags: string[]): Promise<void> {
+    return this.serializeParticipantRecordMutation(() => this.removeParticipantTagsOnce(tags));
+  }
+
+  private async removeParticipantTagsOnce(tags: string[]): Promise<void> {
     await this.verifyStudyDatabase();
 
     if (!this.participantData) {
@@ -1159,6 +1249,10 @@ export abstract class StorageEngine {
 
   // Updates the participant's stored search params.
   async updateParticipantSearchParams(searchParams: Record<string, string>) {
+    return this.serializeParticipantRecordMutation(() => this.updateParticipantSearchParamsOnce(searchParams));
+  }
+
+  private async updateParticipantSearchParamsOnce(searchParams: Record<string, string>) {
     await this.verifyStudyDatabase();
 
     if (!this.participantData) {
@@ -1171,6 +1265,10 @@ export abstract class StorageEngine {
   }
 
   async updateParticipantMetadata(metadata: ParticipantMetadata) {
+    return this.serializeParticipantRecordMutation(() => this.updateParticipantMetadataOnce(metadata));
+  }
+
+  private async updateParticipantMetadataOnce(metadata: ParticipantMetadata) {
     await this.verifyStudyDatabase();
 
     if (!this.participantData) {
@@ -1193,6 +1291,10 @@ export abstract class StorageEngine {
   }
 
   async updateStudyCondition(condition: string | string[]) {
+    return this.serializeParticipantRecordMutation(() => this.updateStudyConditionOnce(condition));
+  }
+
+  private async updateStudyConditionOnce(condition: string | string[]) {
     await this.verifyStudyDatabase();
 
     if (this.studyId === undefined) {
@@ -1225,15 +1327,21 @@ export abstract class StorageEngine {
 
   // Rejects a participant with the given participantId and reason.
   async rejectParticipant(participantId: string, reason: string) {
-    const participant = participantId === this.currentParticipantId && this.participantData
-      ? this.participantData
-      : await this._getFromStorage(
-        `participants/${participantId}`,
-        'participantData',
-      );
+    return this.serializeParticipantRecordMutation(
+      () => this.rejectParticipantOnce(participantId, reason),
+    );
+  }
+
+  private async rejectParticipantOnce(participantId: string, reason: string) {
+    let participant: StorageObject<'participantData'> | null = null;
     let participantRecordUpdated = false;
 
     try {
+      await Promise.all([...this.activeParticipantSaves]);
+      await this.flushPendingParticipantData();
+      participant = participantId === this.currentParticipantId && this.participantData
+        ? cloneParticipantDataSnapshot(this.participantData)
+        : await this._getFromStorage(`participants/${participantId}`, 'participantData');
       // If the user doesn't exist or is already rejected, return
       if (
         !participant
@@ -1266,9 +1374,11 @@ export abstract class StorageEngine {
       // sequence-assignment updates have both succeeded.
       if (participantId === this.currentParticipantId && this.participantData) {
         this.participantData = rejectedParticipant;
+        await this.cacheParticipantDataSnapshot(rejectedParticipant, participantId);
+        this.invalidatePendingParticipantDataWrite(participantId);
       }
     } catch (error) {
-      let realtimeRollbackError: unknown = null;
+      const rollbackErrors: unknown[] = [];
       try {
         if (participantRecordUpdated) {
           const originalCurrentParticipantId = this.currentParticipantId;
@@ -1282,7 +1392,7 @@ export abstract class StorageEngine {
           }
         }
       } catch (rollbackError) {
-        realtimeRollbackError = rollbackError;
+        rollbackErrors.push(rollbackError);
         console.warn('Error rolling back rejected participant realtime state:', rollbackError);
       }
 
@@ -1295,12 +1405,15 @@ export abstract class StorageEngine {
           );
         }
       } catch (rollbackError) {
+        rollbackErrors.push(rollbackError);
         console.warn('Error rolling back rejected participant state:', rollbackError);
       }
-      if (realtimeRollbackError) {
-        console.warn('Participant rejection rollback completed with realtime inconsistencies.');
+      if (rollbackErrors.length > 0) {
+        throw new Error(
+          `Failed to reject participant (${normalizeError(error).message}); rollback also failed: ${rollbackErrors.map((e) => normalizeError(e).message).join('; ')}`,
+        );
       }
-      console.warn('Error rejecting participant:', error);
+      throw error;
     }
   }
 
@@ -1315,15 +1428,21 @@ export abstract class StorageEngine {
 
   // Un-rejects a participant with the given participantId.
   async undoRejectParticipant(participantId: string) {
-    const participant = participantId === this.currentParticipantId && this.participantData
-      ? this.participantData
-      : await this._getFromStorage(
-        `participants/${participantId}`,
-        'participantData',
-      );
+    return this.serializeParticipantRecordMutation(
+      () => this.undoRejectParticipantOnce(participantId),
+    );
+  }
+
+  private async undoRejectParticipantOnce(participantId: string) {
+    let participant: StorageObject<'participantData'> | null = null;
     let participantRecordUpdated = false;
 
     try {
+      await Promise.all([...this.activeParticipantSaves]);
+      await this.flushPendingParticipantData();
+      participant = participantId === this.currentParticipantId && this.participantData
+        ? cloneParticipantDataSnapshot(this.participantData)
+        : await this._getFromStorage(`participants/${participantId}`, 'participantData');
       // If the user doesn't exist, return
       if (!participant || !isParticipantData(participant)) {
         return;
@@ -1343,8 +1462,19 @@ export abstract class StorageEngine {
 
       if (participantId === this.currentParticipantId && this.participantData) {
         this.participantData = restoredParticipant;
+        await this.cacheParticipantDataSnapshot(restoredParticipant, participantId);
+        this.invalidatePendingParticipantDataWrite(participantId);
       }
     } catch (error) {
+      const rollbackErrors: unknown[] = [];
+      if (participantRecordUpdated) {
+        try {
+          await this._rejectParticipantRealtime(participantId);
+        } catch (rollbackError) {
+          rollbackErrors.push(rollbackError);
+          console.warn('Error restoring rejected participant realtime state:', rollbackError);
+        }
+      }
       try {
         if (participantRecordUpdated && participant && isParticipantData(participant)) {
           await this._pushToStorage(
@@ -1354,9 +1484,15 @@ export abstract class StorageEngine {
           );
         }
       } catch (rollbackError) {
+        rollbackErrors.push(rollbackError);
         console.warn('Error rolling back participant unrejection state:', rollbackError);
       }
-      console.warn('Error undoing participant rejection:', error);
+      if (rollbackErrors.length > 0) {
+        throw new Error(
+          `Failed to undo participant rejection (${normalizeError(error).message}); rollback also failed: ${rollbackErrors.map((e) => normalizeError(e).message).join('; ')}`,
+        );
+      }
+      throw error;
     }
   }
 
@@ -1416,7 +1552,15 @@ export abstract class StorageEngine {
   }
 
   // Save the answer into the local participant data and queue a debounced write to storage.
-  async saveAnswers(answers: ParticipantData['answers']) {
+  async saveAnswers(answers: ParticipantData['answers']): Promise<void> {
+    if (this.participantRecordMutationsQueued > 0) {
+      await this.participantRecordMutationChain;
+    }
+
+    if (this.participantFinalizationInProgress) {
+      await this.participantFinalizationChain;
+    }
+
     if (!this.currentParticipantId || this.participantData === undefined) {
       throw new Error('Participant not initialized');
     }
@@ -1430,6 +1574,7 @@ export abstract class StorageEngine {
       answers: answersWithoutProvenance,
       provenanceByIdentifier,
     } = splitProvenanceFromAnswers(answers);
+    const participantId = this.currentParticipantId;
     const provenanceUploadPromises = Object.entries(provenanceByIdentifier).map(
       ([taskName, provenanceGraph]) => this.saveProvenance(provenanceGraph, taskName),
     );
@@ -1440,9 +1585,19 @@ export abstract class StorageEngine {
       answers: answersWithoutProvenance,
     };
 
-    await this.cacheParticipantDataSnapshot(this.participantData, this.currentParticipantId);
-    this.scheduleParticipantDataWrite(this.participantData);
-    await Promise.all(provenanceUploadPromises);
+    const snapshot = cloneParticipantDataSnapshot(this.participantData);
+    this.scheduleParticipantDataWrite(snapshot, false, participantId);
+
+    const savePromise = Promise.all([
+      this.cacheParticipantDataSnapshot(snapshot, participantId),
+      ...provenanceUploadPromises,
+    ]).then(() => undefined);
+    this.activeParticipantSaves.add(savePromise);
+    try {
+      await savePromise;
+    } finally {
+      this.activeParticipantSaves.delete(savePromise);
+    }
   }
 
   // Updates the progress data in the sequence assignment
@@ -1468,13 +1623,15 @@ export abstract class StorageEngine {
     try {
       const existingAssignment = await this._getSequenceAssignment(targetParticipantId);
 
-      if (existingAssignment) {
-        await this._updateSequenceAssignmentFields(targetParticipantId, {
-          total: progressData.total,
-          answered: progressData.answered,
-          isDynamic: progressData.isDynamic,
-        });
+      if (!existingAssignment) {
+        throw new Error(`Sequence assignment for participant ${targetParticipantId} was not found`);
       }
+
+      await this._updateSequenceAssignmentFields(targetParticipantId, {
+        total: progressData.total,
+        answered: progressData.answered,
+        isDynamic: progressData.isDynamic,
+      });
 
       if (this.pendingProgressDataWrite === progressDataWrite) {
         this.pendingProgressDataWrite = undefined;
@@ -1506,6 +1663,24 @@ export abstract class StorageEngine {
   }
 
   async finalizeParticipant(): Promise<FinalizeParticipantResult> {
+    const finalization = this.participantFinalizationChain.then(async () => {
+      this.participantFinalizationInProgress = true;
+      try {
+        try {
+          await Promise.all([...this.activeParticipantSaves]);
+        } catch (error) {
+          return { status: 'error' as const, message: normalizeError(error).message };
+        }
+        return await this.finalizeParticipantOnce();
+      } finally {
+        this.participantFinalizationInProgress = false;
+      }
+    });
+    this.participantFinalizationChain = finalization.then(() => undefined, () => undefined);
+    return finalization;
+  }
+
+  private async finalizeParticipantOnce(): Promise<FinalizeParticipantResult> {
     try {
       await this.flushPendingParticipantData();
     } catch (error) {
@@ -1515,14 +1690,21 @@ export abstract class StorageEngine {
       };
     }
 
-    const assetUploadError = await this.waitForPendingAssetUploads();
-
     if (!this.studyId) {
       throw new Error('Study not initialized');
     }
 
     if (!this.currentParticipantId) {
       throw new Error('Participant not initialized');
+    }
+    const participantId = this.currentParticipantId;
+    const assetUploadError = await this.waitForPendingAssetUploads(participantId);
+    if (assetUploadError) {
+      return {
+        status: 'error',
+        message: assetUploadError.message,
+        retryable: false,
+      };
     }
 
     const modes = await this.getModes(this.studyId);
@@ -1533,14 +1715,6 @@ export abstract class StorageEngine {
     const alreadyCompleted = await this.getParticipantCompletionStatus();
     if (alreadyCompleted) {
       return { status: 'complete' };
-    }
-
-    if (assetUploadError) {
-      return {
-        status: 'error',
-        message: assetUploadError.message,
-        retryable: false,
-      };
     }
 
     try {
@@ -1648,12 +1822,14 @@ export abstract class StorageEngine {
       return undefined;
     }
 
-    return this.trackAssetOperation(`provenance/${taskName}`, async () => {
+    const participantId = this.currentParticipantId;
+    if (!participantId) {
+      throw new Error('Participant not initialized');
+    }
+
+    return this.trackAssetOperation(this.getParticipantAssetKey(participantId, `provenance/${taskName}`), async () => {
       if (this.studyId === undefined) {
         throw new Error('Study ID is not set');
-      }
-      if (!this.currentParticipantId) {
-        throw new Error('Participant not initialized');
       }
       const modes = await this.getModes(this.studyId);
       if (!modes.dataCollectionEnabled) {
@@ -1661,13 +1837,13 @@ export abstract class StorageEngine {
       }
 
       await this._pushToStorage(
-        `provenance/${this.currentParticipantId}`,
+        `provenance/${participantId}`,
         taskName,
         provenanceToSave as unknown as StorageObject<typeof taskName>,
       );
 
       try {
-        await this._cacheStorageObject(`provenance/${this.currentParticipantId}`, taskName);
+        await this._cacheStorageObject(`provenance/${participantId}`, taskName);
       } catch (error) {
         console.warn(`Failed to update cache headers for provenance ${taskName}:`, error);
       }
@@ -1694,9 +1870,13 @@ export abstract class StorageEngine {
     prefix: string,
     blob: Blob,
     taskName: string,
+    participantId = this.currentParticipantId,
   ) {
-    const assetKey = `${prefix}/${taskName}`;
-    const participantKey = `${prefix}/${this.currentParticipantId}`;
+    if (!participantId) {
+      throw new Error('Participant not initialized');
+    }
+    const assetKey = this.getParticipantAssetKey(participantId, `${prefix}/${taskName}`);
+    const participantKey = `${prefix}/${participantId}`;
     const uploadPromise = (async () => {
       try {
         await this._pushToStorage(participantKey, taskName, blob);
@@ -1726,7 +1906,11 @@ export abstract class StorageEngine {
     blob: Blob,
     taskName: string,
   ) {
-    return this.trackAssetOperation(`audio/${taskName}`, async () => {
+    const participantId = this.currentParticipantId;
+    if (!participantId) {
+      throw new Error('Participant not initialized');
+    }
+    return this.trackAssetOperation(this.getParticipantAssetKey(participantId, `audio/${taskName}`), async () => {
       if (this.studyId === undefined) {
         throw new Error('Study ID is not set');
       }
@@ -1734,7 +1918,7 @@ export abstract class StorageEngine {
       if (!modes.dataCollectionEnabled) {
         throw new Error('Data collection is disabled for this study');
       }
-      return this.saveAsset('audio', blob, taskName);
+      return this.saveAsset('audio', blob, taskName, participantId);
     });
   }
 
@@ -1752,7 +1936,11 @@ export abstract class StorageEngine {
     blob: Blob,
     taskName: string,
   ) {
-    return this.trackAssetOperation(`screenRecording/${taskName}`, async () => {
+    const participantId = this.currentParticipantId;
+    if (!participantId) {
+      throw new Error('Participant not initialized');
+    }
+    return this.trackAssetOperation(this.getParticipantAssetKey(participantId, `screenRecording/${taskName}`), async () => {
       if (this.studyId === undefined) {
         throw new Error('Study ID is not set');
       }
@@ -1760,7 +1948,7 @@ export abstract class StorageEngine {
       if (!modes.dataCollectionEnabled) {
         throw new Error('Data collection is disabled for this study');
       }
-      return this.saveAsset('screenRecording', blob, taskName);
+      return this.saveAsset('screenRecording', blob, taskName, participantId);
     });
   }
 

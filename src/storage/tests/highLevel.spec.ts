@@ -110,6 +110,12 @@ function makeStoredAnswer(identifier: string, endTime: number): StoredAnswer {
   };
 }
 
+function createDeferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise; });
+  return { promise, resolve };
+}
+
 class DelayedLocalStorageEngine extends LocalStorageEngine {
   private holdParticipantDataWrite = false;
 
@@ -257,6 +263,10 @@ class FailingParticipantDataLocalStorageEngine extends LocalStorageEngine {
 
   failNextProgressWrite() {
     this.failNextProgressDataWrite = true;
+  }
+
+  setParticipantDataWriteDelay(delayMs: number) {
+    this.participantDataWriteDelayMs = delayMs;
   }
 
   getPersistedParticipantData(participantId: string) {
@@ -897,6 +907,337 @@ describe.each([
     }));
   });
 
+  test('finalizeParticipant retries a queued participant snapshot after its write fails', async () => {
+    const failingStorageEngine = new FailingParticipantDataLocalStorageEngine(true);
+    storageEngine = failingStorageEngine;
+    await storageEngine.connect();
+    await storageEngine.initializeStudyDb(studyId);
+    const participantSession = await storageEngine.initializeParticipantSession({}, configSimple, participantMetadata);
+    const answers = { intro_0: makeStoredAnswer('intro_0', 100) };
+
+    await storageEngine.saveAnswers(answers);
+    failingStorageEngine.failNextWrite();
+
+    const firstFinalizeResult = await storageEngine.finalizeParticipant();
+    expect(firstFinalizeResult.status).toBe('error');
+    expect(await storageEngine.getParticipantCompletionStatus(participantSession.participantId)).toBe(false);
+
+    const retryFinalizeResult = await storageEngine.finalizeParticipant();
+    expect(retryFinalizeResult.status).toBe('complete');
+    expect(await failingStorageEngine.getPersistedParticipantData(participantSession.participantId))
+      .toEqual(expect.objectContaining({ answers }));
+    expect(await storageEngine.getParticipantCompletionStatus(participantSession.participantId)).toBe(true);
+  });
+
+  test('retains a failed immediate participant-data write for finalization retry', async () => {
+    const failingStorageEngine = new FailingParticipantDataLocalStorageEngine(true);
+    storageEngine = failingStorageEngine;
+    await storageEngine.connect();
+    await storageEngine.initializeStudyDb(studyId);
+    const participantSession = await storageEngine.initializeParticipantSession({}, configSimple, participantMetadata);
+    failingStorageEngine.failNextWrite();
+
+    await expect(storageEngine.updateParticipantSearchParams({ source: 'retry-test' }))
+      .rejects.toThrow('Participant data upload failed');
+
+    expect((await storageEngine.finalizeParticipant()).status).toBe('complete');
+    expect(await failingStorageEngine.getPersistedParticipantData(participantSession.participantId))
+      .toEqual(expect.objectContaining({ searchParams: { source: 'retry-test' } }));
+  });
+
+  test('serializes local snapshot cache writes so a slower older save cannot replace a newer one', async () => {
+    const participantSession = await storageEngine.initializeParticipantSession({}, configSimple, participantMetadata);
+    const { participantStore } = storageEngine as unknown as {
+      participantStore: { setItem: (key: string, value: unknown) => Promise<unknown> };
+    };
+    const originalSetItem = participantStore.setItem.bind(participantStore);
+    const firstCacheStarted = createDeferred();
+    const releaseFirstCache = createDeferred();
+    let pauseFirstCache = true;
+    const setItemSpy = vi.spyOn(participantStore, 'setItem').mockImplementation(async (key, value) => {
+      if (pauseFirstCache) {
+        pauseFirstCache = false;
+        firstCacheStarted.resolve();
+        await releaseFirstCache.promise;
+      }
+      return originalSetItem(key, value);
+    });
+
+    const firstAnswers = { intro_0: makeStoredAnswer('intro_0', 600) };
+    const latestAnswers = { intro_0: makeStoredAnswer('intro_0', 700) };
+    const firstSave = storageEngine.saveAnswers(firstAnswers);
+    await firstCacheStarted.promise;
+    const latestSave = storageEngine.saveAnswers(latestAnswers);
+    await Promise.resolve();
+    expect(setItemSpy).toHaveBeenCalledTimes(1);
+
+    releaseFirstCache.resolve();
+    await Promise.all([firstSave, latestSave]);
+    await storageEngine.flushPendingParticipantData();
+    expect((await storageEngine.getParticipantData(participantSession.participantId))?.answers).toEqual(latestAnswers);
+    setItemSpy.mockRestore();
+  });
+
+  test('rejecting a participant drains an older queued answer snapshot before persisting rejection', async () => {
+    const failingStorageEngine = new FailingParticipantDataLocalStorageEngine(true);
+    storageEngine = failingStorageEngine;
+    await storageEngine.connect();
+    await storageEngine.initializeStudyDb(studyId);
+    const participantSession = await storageEngine.initializeParticipantSession({}, configSimple, participantMetadata);
+    failingStorageEngine.setParticipantDataWriteDelay(60_000);
+    await storageEngine.saveAnswers({ intro_0: makeStoredAnswer('intro_0', 800) });
+
+    await storageEngine.rejectParticipant(participantSession.participantId, 'reject after answer');
+
+    expect(await failingStorageEngine.getPersistedParticipantData(participantSession.participantId))
+      .toEqual(expect.objectContaining({ rejected: expect.objectContaining({ reason: 'reject after answer' }) }));
+  });
+
+  test('an answer save started during undo rejection runs after undo and remains persisted', async () => {
+    const failingStorageEngine = new FailingParticipantDataLocalStorageEngine(true);
+    storageEngine = failingStorageEngine;
+    await storageEngine.connect();
+    await storageEngine.initializeStudyDb(studyId);
+    const participantSession = await storageEngine.initializeParticipantSession({}, configSimple, participantMetadata);
+    await storageEngine.rejectParticipant(participantSession.participantId, 'undo race');
+
+    const undoStarted = createDeferred();
+    const releaseUndo = createDeferred();
+    const originalUndo = (failingStorageEngine as unknown as {
+      _undoRejectParticipantRealtime: (id: string) => Promise<void>;
+    })._undoRejectParticipantRealtime.bind(failingStorageEngine);
+    vi.spyOn(
+      failingStorageEngine as unknown as { _undoRejectParticipantRealtime: (id: string) => Promise<void> },
+      '_undoRejectParticipantRealtime',
+    ).mockImplementation(async (id) => {
+      undoStarted.resolve();
+      await releaseUndo.promise;
+      await originalUndo(id);
+    });
+
+    const undoPromise = storageEngine.undoRejectParticipant(participantSession.participantId);
+    await undoStarted.promise;
+    const answers = { intro_0: makeStoredAnswer('intro_0', 900) };
+    const savePromise = storageEngine.saveAnswers(answers);
+    releaseUndo.resolve();
+    await Promise.all([undoPromise, savePromise]);
+    await storageEngine.flushPendingParticipantData();
+
+    expect(await failingStorageEngine.getPersistedParticipantData(participantSession.participantId))
+      .toEqual(expect.objectContaining({ rejected: false, answers }));
+  });
+
+  test('participant search-param writes started during rejection run after the rejection snapshot', async () => {
+    const failingStorageEngine = new FailingParticipantDataLocalStorageEngine(true);
+    storageEngine = failingStorageEngine;
+    await storageEngine.connect();
+    await storageEngine.initializeStudyDb(studyId);
+    const participantSession = await storageEngine.initializeParticipantSession({}, configSimple, participantMetadata);
+
+    const rejectStarted = createDeferred();
+    const releaseReject = createDeferred();
+    const originalReject = (failingStorageEngine as unknown as {
+      _rejectParticipantRealtime: (id: string) => Promise<void>;
+    })._rejectParticipantRealtime.bind(failingStorageEngine);
+    vi.spyOn(
+      failingStorageEngine as unknown as { _rejectParticipantRealtime: (id: string) => Promise<void> },
+      '_rejectParticipantRealtime',
+    ).mockImplementation(async (id) => {
+      rejectStarted.resolve();
+      await releaseReject.promise;
+      await originalReject(id);
+    });
+
+    const rejectPromise = storageEngine.rejectParticipant(participantSession.participantId, 'metadata race');
+    await rejectStarted.promise;
+    const metadataPromise = storageEngine.updateParticipantSearchParams({ source: 'after-reject' });
+    releaseReject.resolve();
+    await Promise.all([rejectPromise, metadataPromise]);
+
+    expect(await failingStorageEngine.getPersistedParticipantData(participantSession.participantId))
+      .toEqual(expect.objectContaining({
+        rejected: expect.objectContaining({ reason: 'metadata race' }),
+        searchParams: { source: 'after-reject' },
+      }));
+  });
+
+  test('finalization reports an asset failure even if already complete or collection is disabled', async () => {
+    const failingStorageEngine = new FailingParticipantDataLocalStorageEngine(true);
+    storageEngine = failingStorageEngine;
+    await storageEngine.connect();
+    await storageEngine.initializeStudyDb(studyId);
+    await storageEngine.initializeParticipantSession({}, configSimple, participantMetadata);
+    expect((await storageEngine.finalizeParticipant()).status).toBe('complete');
+
+    const pushSpy = vi.spyOn(
+      failingStorageEngine as unknown as { _pushToStorage: StorageEngine['_pushToStorage'] },
+      '_pushToStorage',
+    ).mockRejectedValue(new Error('asset upload failed'));
+    await expect(storageEngine.saveAsset('audio', new Blob(['audio']), 'task'))
+      .rejects.toThrow('asset upload failed');
+    pushSpy.mockRestore();
+
+    expect((await storageEngine.finalizeParticipant()).status).toBe('error');
+    await storageEngine.setMode(studyId, 'dataCollectionEnabled', false);
+    expect((await storageEngine.finalizeParticipant()).status).toBe('error');
+  });
+
+  test('asset upload retains the participant identity captured before an async mode lookup', async () => {
+    const participantSession = await storageEngine.initializeParticipantSession({}, configSimple, participantMetadata);
+    const modeLookupStarted = createDeferred();
+    const releaseModeLookup = createDeferred();
+    const originalGetModes = storageEngine.getModes.bind(storageEngine);
+    let pauseLookup = true;
+    vi.spyOn(storageEngine, 'getModes').mockImplementation(async (...args) => {
+      if (pauseLookup) {
+        pauseLookup = false;
+        modeLookupStarted.resolve();
+        await releaseModeLookup.promise;
+      }
+      return originalGetModes(...args);
+    });
+    const pushSpy = vi.spyOn(
+      storageEngine as unknown as { _pushToStorage: StorageEngine['_pushToStorage'] },
+      '_pushToStorage',
+    );
+
+    const upload = storageEngine.saveAudioRecording(new Blob(['audio']), 'task');
+    await modeLookupStarted.promise;
+    await storageEngine.initializeParticipantSession({}, configSimple, participantMetadata, 'asset-next-participant');
+    releaseModeLookup.resolve();
+    await upload;
+
+    expect(pushSpy).toHaveBeenCalledWith(`audio/${participantSession.participantId}`, 'task', expect.any(Blob));
+    pushSpy.mockRestore();
+  });
+
+  test('finalize waits for an answer save paused during cache persistence', async () => {
+    const failingStorageEngine = new FailingParticipantDataLocalStorageEngine(true);
+    storageEngine = failingStorageEngine;
+    await storageEngine.connect();
+    await storageEngine.initializeStudyDb(studyId);
+    const participantSession = await storageEngine.initializeParticipantSession({}, configSimple, participantMetadata);
+    const cacheStarted = createDeferred();
+    const allowCache = createDeferred();
+    const cacheSpy = vi.spyOn(
+      failingStorageEngine as unknown as { cacheParticipantDataSnapshot: (data: unknown, id: string) => Promise<void> },
+      'cacheParticipantDataSnapshot',
+    ).mockImplementation(async () => {
+      cacheStarted.resolve();
+      await allowCache.promise;
+    });
+
+    const answers = { intro_0: makeStoredAnswer('intro_0', 200) };
+    const savePromise = storageEngine.saveAnswers(answers);
+    await cacheStarted.promise;
+    let finalized = false;
+    const finalizePromise = storageEngine.finalizeParticipant().then((result) => {
+      finalized = true;
+      return result;
+    });
+
+    await Promise.resolve();
+    expect(finalized).toBe(false);
+    allowCache.resolve();
+    await savePromise;
+    expect((await finalizePromise).status).toBe('complete');
+    expect(await failingStorageEngine.getPersistedParticipantData(participantSession.participantId))
+      .toEqual(expect.objectContaining({ answers }));
+    cacheSpy.mockRestore();
+  });
+
+  test('an immediate snapshot cannot clear a newer answer saved during cache persistence', async () => {
+    const failingStorageEngine = new FailingParticipantDataLocalStorageEngine(true);
+    storageEngine = failingStorageEngine;
+    await storageEngine.connect();
+    await storageEngine.initializeStudyDb(studyId);
+    const participantSession = await storageEngine.initializeParticipantSession({}, configSimple, participantMetadata);
+    const cacheStarted = createDeferred();
+    const allowCache = createDeferred();
+    let pauseNextCache = true;
+    const originalCache = (failingStorageEngine as unknown as {
+      cacheParticipantDataSnapshot: (value: unknown, participantId: string) => Promise<void>;
+    }).cacheParticipantDataSnapshot.bind(failingStorageEngine);
+    const cacheSpy = vi.spyOn(
+      failingStorageEngine as unknown as { cacheParticipantDataSnapshot: (data: unknown, id: string) => Promise<void> },
+      'cacheParticipantDataSnapshot',
+    ).mockImplementation(async (data, id) => {
+      if (pauseNextCache) {
+        pauseNextCache = false;
+        cacheStarted.resolve();
+        await allowCache.promise;
+      }
+      await originalCache(data, id);
+    });
+
+    const persistImmediately = (failingStorageEngine as unknown as {
+      persistCurrentParticipantData: (options: { immediate: boolean }) => Promise<void>;
+    }).persistCurrentParticipantData({ immediate: true });
+    await cacheStarted.promise;
+    const answers = { intro_0: makeStoredAnswer('intro_0', 300) };
+    await storageEngine.saveAnswers(answers);
+    allowCache.resolve();
+    await persistImmediately;
+    expect(await failingStorageEngine.getPersistedParticipantData(participantSession.participantId))
+      .toEqual(expect.objectContaining({ answers }));
+    expect((await storageEngine.finalizeParticipant()).status).toBe('complete');
+    expect(await failingStorageEngine.getPersistedParticipantData(participantSession.participantId))
+      .toEqual(expect.objectContaining({ answers }));
+    cacheSpy.mockRestore();
+  });
+
+  test('concurrent finalizers retry a write failure independently', async () => {
+    const failingStorageEngine = new FailingParticipantDataLocalStorageEngine(true);
+    storageEngine = failingStorageEngine;
+    await storageEngine.connect();
+    await storageEngine.initializeStudyDb(studyId);
+    const participantSession = await storageEngine.initializeParticipantSession({}, configSimple, participantMetadata);
+    await storageEngine.saveAnswers({ intro_0: makeStoredAnswer('intro_0', 400) });
+    failingStorageEngine.failNextWrite();
+
+    const [firstResult, secondResult] = await Promise.all([
+      storageEngine.finalizeParticipant(),
+      storageEngine.finalizeParticipant(),
+    ]);
+
+    expect(firstResult.status).toBe('error');
+    expect(secondResult.status).toBe('complete');
+    expect(await storageEngine.getParticipantCompletionStatus(participantSession.participantId)).toBe(true);
+  });
+
+  test('participant switch waits for an in-flight answer save and saves it under the original ID', async () => {
+    const failingStorageEngine = new FailingParticipantDataLocalStorageEngine(true);
+    storageEngine = failingStorageEngine;
+    await storageEngine.connect();
+    await storageEngine.initializeStudyDb(studyId);
+    const originalSession = await storageEngine.initializeParticipantSession({}, configSimple, participantMetadata);
+    const cacheStarted = createDeferred();
+    const allowCache = createDeferred();
+    const cacheSpy = vi.spyOn(
+      failingStorageEngine as unknown as { cacheParticipantDataSnapshot: (data: unknown, id: string) => Promise<void> },
+      'cacheParticipantDataSnapshot',
+    ).mockImplementation(async () => {
+      cacheStarted.resolve();
+      await allowCache.promise;
+    });
+    const answers = { intro_0: makeStoredAnswer('intro_0', 500) };
+    const savePromise = storageEngine.saveAnswers(answers);
+    await cacheStarted.promise;
+    let switched = false;
+    const switchPromise = storageEngine.initializeParticipantSession({}, configSimple, participantMetadata, 'next-participant').then((session) => {
+      switched = true;
+      return session;
+    });
+    await Promise.resolve();
+    expect(switched).toBe(false);
+    allowCache.resolve();
+    await savePromise;
+    await switchPromise;
+    expect(await failingStorageEngine.getPersistedParticipantData(originalSession.participantId))
+      .toEqual(expect.objectContaining({ answers }));
+    cacheSpy.mockRestore();
+  });
+
   test('retryFailedWrites reconnects and fully persists the latest participant snapshot', async () => {
     const failingStorageEngine = new FailingParticipantDataLocalStorageEngine(true);
     storageEngine = failingStorageEngine;
@@ -956,6 +1297,50 @@ describe.each([
       (assignment) => assignment.participantId === participantSession.participantId,
     );
     expect(sequenceAssignment).toEqual(expect.objectContaining(progressData));
+  });
+
+  test('retryFailedWrites retains progress when sequence-assignment lookup fails', async () => {
+    const failingStorageEngine = new FailingParticipantDataLocalStorageEngine(true);
+    storageEngine = failingStorageEngine;
+    await storageEngine.connect();
+    await storageEngine.initializeStudyDb(studyId);
+    const participantSession = await storageEngine.initializeParticipantSession({}, configSimple, participantMetadata);
+    const progressData = { total: 8, answered: ['intro_0'], isDynamic: false };
+    vi.spyOn(
+      failingStorageEngine as unknown as {
+        _getSequenceAssignment: (id: string) => Promise<SequenceAssignment | null>;
+      },
+      '_getSequenceAssignment',
+    ).mockRejectedValueOnce(new Error('Assignment lookup unavailable'));
+
+    await expect(storageEngine.updateProgressData(progressData)).rejects.toThrow('Assignment lookup unavailable');
+    await storageEngine.retryFailedWrites();
+
+    const assignment = (await storageEngine.getAllSequenceAssignments(studyId))
+      .find((item) => item.participantId === participantSession.participantId);
+    expect(assignment).toEqual(expect.objectContaining(progressData));
+  });
+
+  test('retains progress when its sequence assignment is genuinely missing', async () => {
+    const failingStorageEngine = new FailingParticipantDataLocalStorageEngine(true);
+    storageEngine = failingStorageEngine;
+    await storageEngine.connect();
+    await storageEngine.initializeStudyDb(studyId);
+    const participantSession = await storageEngine.initializeParticipantSession({}, configSimple, participantMetadata);
+    const progressData = { total: 9, answered: ['intro_0'], isDynamic: false };
+    vi.spyOn(
+      failingStorageEngine as unknown as {
+        _getSequenceAssignment: (id: string) => Promise<SequenceAssignment | null>;
+      },
+      '_getSequenceAssignment',
+    ).mockResolvedValueOnce(null);
+
+    await expect(storageEngine.updateProgressData(progressData)).rejects.toThrow('was not found');
+    await storageEngine.retryFailedWrites();
+
+    const assignment = (await storageEngine.getAllSequenceAssignments(studyId))
+      .find((item) => item.participantId === participantSession.participantId);
+    expect(assignment).toEqual(expect.objectContaining(progressData));
   });
 
   test('retryFailedWrites retries failed provenance before resolving', async () => {

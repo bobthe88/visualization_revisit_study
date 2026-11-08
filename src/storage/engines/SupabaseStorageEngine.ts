@@ -23,7 +23,12 @@ export class SupabaseStorageEngine extends CloudStorageEngine {
       .download(`${this.collectionPrefix}${studyId || this.studyId}/${prefix}_${type}`);
 
     if (error) {
-      return {} as StorageObject<T>;
+      // A confirmed missing object is an empty result; other failures must not
+      // be mistaken for missing data and subsequently overwritten.
+      if (typeof error === 'object' && error !== null && 'statusCode' in error && error.statusCode === '404') {
+        return {} as StorageObject<T>;
+      }
+      throw new Error('Failed to download from Supabase');
     }
 
     const dataToParse = this.testing ? new Blob([data as unknown as string], { type: 'application/json' }) : data;
@@ -123,7 +128,7 @@ export class SupabaseStorageEngine extends CloudStorageEngine {
   protected async _setCurrentConfigHash(configHash: string) {
     await this.verifyStudyDatabase();
     // set the config hash in the study collection by patching the document
-    await this.supabase
+    const { error } = await this.supabase
       .from('revisit')
       .upsert({
         studyId: `${this.collectionPrefix}${this.studyId}`,
@@ -132,6 +137,9 @@ export class SupabaseStorageEngine extends CloudStorageEngine {
       })
       .eq('studyId', `${this.collectionPrefix}${this.studyId}`)
       .eq('docId', 'currentConfigHash');
+    if (error) {
+      throw new Error('Failed to update current config hash');
+    }
   }
 
   public async getAllSequenceAssignments(studyId: string) {
@@ -161,7 +169,7 @@ export class SupabaseStorageEngine extends CloudStorageEngine {
     }
 
     // Create a sequence assignment for the participant in the study collection
-    await this.supabase
+    const { error } = await this.supabase
       .from('revisit')
       .upsert({
         studyId: `${this.collectionPrefix}${this.studyId}`,
@@ -170,6 +178,9 @@ export class SupabaseStorageEngine extends CloudStorageEngine {
       })
       .eq('studyId', `${this.collectionPrefix}${this.studyId}`)
       .eq('docId', `sequenceAssignment_${participantId}`);
+    if (error) {
+      throw new Error('Failed to create sequence assignment');
+    }
   }
 
   protected async _updateSequenceAssignmentFields(participantId: string, updatedFields: Partial<SequenceAssignment>) {
@@ -195,11 +206,19 @@ export class SupabaseStorageEngine extends CloudStorageEngine {
       delete updatedData.conditions;
     }
 
-    await this.supabase
+    const { data: updatedRows, error: updateError } = await this.supabase
       .from('revisit')
       .update({ data: updatedData })
       .eq('studyId', `${this.collectionPrefix}${this.studyId}`)
-      .eq('docId', sequenceAssignmentPath);
+      .eq('docId', sequenceAssignmentPath)
+      .eq('data', data.data)
+      .select('docId');
+    if (updateError) {
+      throw new Error('Failed to update sequence assignment');
+    }
+    if (!updatedRows || updatedRows.length === 0) {
+      throw new Error('Sequence assignment changed while updating; retry progress update');
+    }
   }
 
   protected async _getSequenceAssignment(participantId: string) {
@@ -208,16 +227,22 @@ export class SupabaseStorageEngine extends CloudStorageEngine {
       throw new Error('Study ID is not set');
     }
 
-    const { data, error } = await this.supabase
+    const { data: assignments, error } = await this.supabase
       .from('revisit')
       .select('data, createdAt')
       .eq('studyId', `${this.collectionPrefix}${this.studyId}`)
-      .eq('docId', `sequenceAssignment_${participantId}`)
-      .single();
+      .eq('docId', `sequenceAssignment_${participantId}`);
 
-    if (error || !data) {
+    if (error) {
+      throw new Error('Failed to retrieve sequence assignment');
+    }
+    if (!assignments || assignments.length === 0) {
       return null;
     }
+    if (assignments.length > 1) {
+      throw new Error('Multiple sequence assignments found for participant');
+    }
+    const [data] = assignments;
 
     return {
       ...data.data,
@@ -249,11 +274,14 @@ export class SupabaseStorageEngine extends CloudStorageEngine {
 
     // Update the sequence assignment for the current participant to mark it as completed
     const sequenceAssignmentPath = `sequenceAssignment_${this.currentParticipantId}`;
-    await this.supabase
+    const { error: completionError } = await this.supabase
       .from('revisit')
       .update({ data: { ...data.data, completed: new Date().getTime() } })
       .eq('studyId', `${this.collectionPrefix}${this.studyId}`)
       .eq('docId', sequenceAssignmentPath);
+    if (completionError) {
+      throw new Error('Failed to complete participant');
+    }
   }
 
   protected async _rejectParticipantRealtime(participantId: string) {
@@ -276,11 +304,14 @@ export class SupabaseStorageEngine extends CloudStorageEngine {
     }
 
     // Update the sequence assignment for the participant to mark it as rejected
-    await this.supabase
+    const { error: rejectionError } = await this.supabase
       .from('revisit')
       .update({ data: { ...data.data, rejected: true, timestamp: new Date().getTime() } })
       .eq('studyId', `${this.collectionPrefix}${this.studyId}`)
       .eq('docId', sequenceAssignmentPath);
+    if (rejectionError) {
+      throw new Error('Failed to reject participant assignment');
+    }
 
     const claimedParticipantId = data.data.claimedParticipantId as string | undefined;
     if (claimedParticipantId) {
@@ -298,11 +329,14 @@ export class SupabaseStorageEngine extends CloudStorageEngine {
 
       // Update the claimed sequence assignment to mark it as available again
       // Also mark as rejected so it doesn't get incorrectly reused
-      await this.supabase
+      const { error: claimedUpdateError } = await this.supabase
         .from('revisit')
         .update({ data: { ...claimedData.data, claimed: false, rejected: true } })
         .eq('studyId', `${this.collectionPrefix}${this.studyId}`)
         .eq('docId', claimedSequenceAssignmentPath);
+      if (claimedUpdateError) {
+        throw new Error('Failed to release claimed sequence assignment');
+      }
       return;
     }
 
@@ -317,11 +351,14 @@ export class SupabaseStorageEngine extends CloudStorageEngine {
     if (claimedError || !claimedData) {
       return;
     }
-    await this.supabase
+    const { error: legacyUpdateError } = await this.supabase
       .from('revisit')
       .update({ data: { ...claimedData.data, claimed: false, rejected: true } })
       .eq('studyId', `${this.collectionPrefix}${this.studyId}`)
       .eq('docId', `sequenceAssignment_${claimedData.data.participantId}`);
+    if (legacyUpdateError) {
+      throw new Error('Failed to release legacy claimed sequence assignment');
+    }
   }
 
   protected async _undoRejectParticipantRealtime(participantId: string) {
@@ -365,19 +402,25 @@ export class SupabaseStorageEngine extends CloudStorageEngine {
         ? new Date(claimedData.createdAt).getTime()
         : claimedData.data.timestamp as number | undefined;
 
-      await this.supabase
+      const { error: claimedRestoreError } = await this.supabase
         .from('revisit')
         .update({ data: { ...claimedData.data, claimed: true, rejected: true } })
         .eq('studyId', `${this.collectionPrefix}${this.studyId}`)
         .eq('docId', claimedSequenceAssignmentPath);
+      if (claimedRestoreError) {
+        throw new Error('Failed to restore claimed sequence assignment');
+      }
     }
 
     // Update the sequence assignment for the participant to mark it as un-rejected
-    await this.supabase
+    const { error: undoError } = await this.supabase
       .from('revisit')
       .update({ data: { ...data.data, rejected: false, timestamp: restoredTimestamp } })
       .eq('studyId', `${this.collectionPrefix}${this.studyId}`)
       .eq('docId', sequenceAssignmentPath);
+    if (undoError) {
+      throw new Error('Failed to undo participant rejection');
+    }
   }
 
   protected async _claimSequenceAssignment(participantId: string, sequenceAssignment: SequenceAssignment) {
@@ -391,11 +434,14 @@ export class SupabaseStorageEngine extends CloudStorageEngine {
 
     const sequenceAssignmentPath = `sequenceAssignment_${participantId}`;
     // Update the sequence assignment for the participant to mark it as claimed
-    await this.supabase
+    const { error } = await this.supabase
       .from('revisit')
       .update({ data: { ...sequenceAssignment, claimed: true } })
       .eq('studyId', `${this.collectionPrefix}${this.studyId}`)
       .eq('docId', sequenceAssignmentPath);
+    if (error) {
+      throw new Error('Failed to claim sequence assignment');
+    }
   }
 
   async initializeStudyDb(studyId: string) {
@@ -419,14 +465,13 @@ export class SupabaseStorageEngine extends CloudStorageEngine {
         docId: 'connect',
         data: {},
       });
-    this.studyId = studyId;
-
     // Error if login failed or if there was a SQL issue that was not a duplicate record
     // (23505 is the code for unique constraint violation in PostgreSQL)
     if (error || (schemaError && schemaError.code !== '23505')) {
       console.error('Error initializing study DB:', error || schemaError);
-      // throw new Error('Failed to initialize study DB');
+      throw new Error('Failed to initialize study DB');
     }
+    this.studyId = studyId;
   }
 
   async connect() {

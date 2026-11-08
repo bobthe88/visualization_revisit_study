@@ -26,17 +26,25 @@ jobs:
 
       - run: yarn install --immutable
 
-      # If on main without env vars, build with .env file
-      - name: Build with .env file
-        if: ${{ vars.VITE_STORAGE_ENGINE == '' }}
-        run: yarn build
-
-      # If on main with env vars, build with github environment variables
-      - name: Build with github environment variables
-        if: ${{ vars.VITE_STORAGE_ENGINE != '' }}
-        run: VITE_STORAGE_ENGINE=$VITE_STORAGE_ENGINE yarn build
+      - name: Require study Supabase configuration for deployment
+        run: test -n "$VITE_SUPABASE_URL" && test -n "$VITE_SUPABASE_ANON_KEY"
         env:
-          VITE_STORAGE_ENGINE: ${{ vars.VITE_STORAGE_ENGINE }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Build pilot deployment with Supabase
+        run: |
+          parent_origins="${CEDAR_WATCH_PARENT_ORIGINS:-https://${GITHUB_REPOSITORY_OWNER,,}.github.io}"
+          CEDAR_WATCH_PARENT_ORIGINS="$parent_origins" \
+          CEDAR_WATCH_BASE_PATH="${VITE_BASE_PATH%/}/cedar-watch-pilot/app/" yarn build
+        env:
+          VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH || (github.event.repository.name == format('{0}.github.io', github.repository_owner) && '/' || format('/{0}/', github.event.repository.name)) }}
+          CEDAR_WATCH_SOURCE_COMMIT: 4b6927b12d212f139d003348b79c912a991bdb8b
+          CEDAR_WATCH_PARENT_ORIGINS: ${{ vars.CEDAR_WATCH_PARENT_ORIGINS }}
+          CEDAR_WATCH_REQUIRE_PARENT_ORIGINS: 'true'
+          VITE_STORAGE_ENGINE: supabase
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - uses: peaceiris/actions-gh-pages@v3
         name: Deploy

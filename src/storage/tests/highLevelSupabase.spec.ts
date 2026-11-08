@@ -18,6 +18,7 @@ type RowData = Record<string, string | number | boolean | null | object>;
 const revisitRows: RowData[] = [];
 const storageFiles: Record<string, string> = {};
 const localStore: Record<string, string | number | object | null> = {};
+let assignmentUpdateHook: (() => void) | null = null;
 
 // ── mocks ─────────────────────────────────────────────────────────────────────
 vi.mock('@supabase/supabase-js', () => {
@@ -44,11 +45,15 @@ vi.mock('@supabase/supabase-js', () => {
 
   function applyFilters(
     rows: Array<RowData>,
-    filters: Array<{ col: string; val: string | number | boolean | null; type: 'eq' | 'like' }>,
+    filters: Array<{ col: string; val: unknown; type: 'eq' | 'like' }>,
   ): Array<RowData> {
     return rows.filter((row) => filters.every(({ col, val, type }) => {
       const colVal = getFieldValue(row, col);
-      if (type === 'eq') return colVal === val;
+      if (type === 'eq') {
+        return colVal === val
+          || (typeof colVal === 'object' && colVal !== null && typeof val === 'object' && val !== null
+            && JSON.stringify(colVal) === JSON.stringify(val));
+      }
       return typeof colVal === 'string' && matchLike(colVal, String(val));
     }));
   }
@@ -56,15 +61,15 @@ vi.mock('@supabase/supabase-js', () => {
   function makeQueryBuilder(getRows: () => Array<RowData>) {
     let op: 'select' | 'upsert' | 'update' | 'delete' | null = null;
     let payload: RowData | RowData[] | Partial<RowData> | null = null;
-    const filters: Array<{ col: string; val: string | number | boolean | null; type: 'eq' | 'like' }> = [];
+    const filters: Array<{ col: string; val: unknown; type: 'eq' | 'like' }> = [];
     let isSingle = false;
 
     const qb = {
-      select(_fields?: string) { op = 'select'; return qb; },
+      select(_fields?: string) { if (op !== 'update') op = 'select'; return qb; },
       upsert(row: RowData | RowData[]) { op = 'upsert'; payload = row; return qb; },
       update(obj: Partial<RowData>) { op = 'update'; payload = obj; return qb; },
       delete() { op = 'delete'; return qb; },
-      eq(col: string, val: string | number | boolean | null) { filters.push({ col, val, type: 'eq' }); return qb; },
+      eq(col: string, val: unknown) { filters.push({ col, val, type: 'eq' }); return qb; },
       like(col: string, val: string) { filters.push({ col, val, type: 'like' }); return qb; },
       limit(_count: number) { return qb; },
       single() { isSingle = true; return qb; },
@@ -108,6 +113,8 @@ vi.mock('@supabase/supabase-js', () => {
             });
             resolve({ data: toUpsert, error: null });
           } else if (op === 'update') {
+            assignmentUpdateHook?.();
+            assignmentUpdateHook = null;
             const matched = applyFilters(rows, filters);
             matched.forEach((row) => Object.assign(row, payload as RowData));
             resolve({ data: matched, error: null });
@@ -146,7 +153,7 @@ vi.mock('@supabase/supabase-js', () => {
               // Return raw string — _getFromStorage (testing=true) wraps it in new Blob([string])
               return { data: storageFiles[path], error: null };
             }
-            return { data: null, error: { message: 'Object not found' } };
+            return { data: null, error: { message: 'Object not found', statusCode: '404' } };
           },
           upload: async (path: string, data: Blob | Buffer | string | object, _opts?: object) => {
             let text: string;
@@ -300,6 +307,7 @@ describe.each([
 
   // Before test harness
   beforeEach(async () => {
+    assignmentUpdateHook = null;
     // Reset the storage engine before each test
     storageEngine = new TestEngine(true);
     await storageEngine.connect();
@@ -497,6 +505,28 @@ describe.each([
     expect(sequenceAssignment).toBeDefined();
     expect(sequenceAssignment!.conditions).toBeUndefined();
     expect(Object.hasOwn(sequenceAssignment!, 'conditions')).toBe(false);
+  });
+
+  test('progress update detects a concurrent assignment change and retries without overwriting it', async () => {
+    const participantSession = await storageEngine.initializeParticipantSession({}, configSimple, participantMetadata);
+    const assignmentDocId = `sequenceAssignment_${participantSession.participantId}`;
+    assignmentUpdateHook = () => {
+      const row = revisitRows.find((item) => item.studyId === `dev-${studyId}` && item.docId === assignmentDocId);
+      if (row && row.data && typeof row.data === 'object') {
+        row.data = { ...(row.data as RowData), concurrentMarker: 'preserved' };
+      }
+    };
+    const progressData = { total: 6, answered: ['intro_0'], isDynamic: false };
+
+    await expect(storageEngine.updateProgressData(progressData))
+      .rejects.toThrow('changed while updating; retry progress update');
+    const afterConflict = revisitRows.find((item) => item.docId === assignmentDocId);
+    expect(afterConflict?.data).toEqual(expect.objectContaining({ concurrentMarker: 'preserved' }));
+
+    await storageEngine.retryFailedWrites();
+    const assignments = await storageEngine.getAllSequenceAssignments(studyId);
+    expect(assignments.find((item) => item.participantId === participantSession.participantId))
+      .toEqual(expect.objectContaining({ ...progressData, concurrentMarker: 'preserved' }));
   });
 
   test('getConditionData includes default when participants have no explicit condition', async () => {
@@ -1052,11 +1082,11 @@ describe.each([
 
   // ── URL getters ──────────────────────────────────────────────────────────────
   test('_getAudioUrl returns null when audio does not exist', async () => {
-    // _getFromStorage returns {} on error, which is truthy. The real
+    // _getFromStorage returns {} for a confirmed missing-object 404, which is truthy. The real
     // _getAudioUrl then calls URL.createObjectURL which is unavailable in
     // Node.  However, _getFromStorage with testing=true wraps the raw mock
     // string in a Blob and JSON.parse-s it.  For a missing file the mock
-    // download returns { data: null, error: ... }, so _getFromStorage
+    // download returns { data: null, error: { statusCode: '404' } }, so _getFromStorage
     // returns {} (empty object).  Because {} is truthy the method attempts
     // URL.createObjectURL.  We stub it so the test can proceed.
     globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock');
@@ -1064,7 +1094,7 @@ describe.each([
     await storageEngine.initializeParticipantSession({}, configSimple, participantMetadata);
     // @ts-expect-error protected
     const result = await storageEngine._getAudioUrl('missing', 'p1');
-    // _getFromStorage returns {} on error which is truthy, so createObjectURL is called
+    // _getFromStorage returns {} for a missing-object 404, so createObjectURL is called
     // The important verification is that no unhandled error is thrown.
     expect(result).toBeDefined();
 

@@ -39,11 +39,15 @@ vi.mock('@supabase/supabase-js', () => {
 
   function applyFilters(
     rows: Array<RowData>,
-    filters: Array<{ col: string; val: string | number | boolean | null; type: 'eq' | 'like' }>,
+    filters: Array<{ col: string; val: unknown; type: 'eq' | 'like' }>,
   ): Array<RowData> {
     return rows.filter((row) => filters.every(({ col, val, type }) => {
       const colVal = getFieldValue(row, col);
-      if (type === 'eq') return colVal === val;
+      if (type === 'eq') {
+        return colVal === val
+          || (typeof colVal === 'object' && colVal !== null && typeof val === 'object' && val !== null
+            && JSON.stringify(colVal) === JSON.stringify(val));
+      }
       return typeof colVal === 'string' && matchLike(colVal, String(val));
     }));
   }
@@ -51,15 +55,15 @@ vi.mock('@supabase/supabase-js', () => {
   function makeQueryBuilder(getRows: () => Array<RowData>) {
     let op: 'select' | 'upsert' | 'update' | 'delete' | null = null;
     let payload: RowData | RowData[] | Partial<RowData> | null = null;
-    const filters: Array<{ col: string; val: string | number | boolean | null; type: 'eq' | 'like' }> = [];
+    const filters: Array<{ col: string; val: unknown; type: 'eq' | 'like' }> = [];
     let isSingle = false;
 
     const qb = {
-      select(_fields?: string) { op = 'select'; return qb; },
+      select(_fields?: string) { if (op !== 'update') op = 'select'; return qb; },
       upsert(row: RowData | RowData[]) { op = 'upsert'; payload = row; return qb; },
       update(obj: Partial<RowData>) { op = 'update'; payload = obj; return qb; },
       delete() { op = 'delete'; return qb; },
-      eq(col: string, val: string | number | boolean | null) { filters.push({ col, val, type: 'eq' }); return qb; },
+      eq(col: string, val: unknown) { filters.push({ col, val, type: 'eq' }); return qb; },
       like(col: string, val: string) { filters.push({ col, val, type: 'like' }); return qb; },
       limit(_count: number) { return qb; },
       single() { isSingle = true; return qb; },
@@ -140,7 +144,7 @@ vi.mock('@supabase/supabase-js', () => {
             if (path in storageFiles) {
               return { data: storageFiles[path], error: null };
             }
-            return { data: null, error: { message: 'Object not found' } };
+            return { data: null, error: { message: 'Object not found', statusCode: '404' } };
           },
           upload: async (path: string, data: Blob | Buffer | string | object, _opts?: object) => {
             let text: string;

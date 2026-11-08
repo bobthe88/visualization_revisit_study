@@ -116,8 +116,8 @@ describe('rejectParticipant — local storage baseline behavior', () => {
     // @ts-expect-error accessing protected method
     storageEngine._pushToStorage = vi.fn().mockRejectedValue(new Error('Storage write failed'));
 
-    // Reject should catch the error and not throw
-    await storageEngine.rejectParticipant(session.participantId, 'Test rejection');
+    await expect(storageEngine.rejectParticipant(session.participantId, 'Test rejection'))
+      .rejects.toThrow('Storage write failed');
 
     // Restore the mock
     // @ts-expect-error accessing protected method
@@ -147,7 +147,8 @@ describe('rejectParticipant — local storage baseline behavior', () => {
     // @ts-expect-error accessing protected method
     storageEngine._rejectParticipantRealtime = vi.fn().mockRejectedValue(new Error('Realtime rejection failed'));
 
-    await storageEngine.rejectParticipant(session.participantId, 'Test rejection');
+    await expect(storageEngine.rejectParticipant(session.participantId, 'Test rejection'))
+      .rejects.toThrow('Realtime rejection failed');
 
     // @ts-expect-error accessing protected method
     storageEngine._rejectParticipantRealtime = originalRejectParticipantRealtime;
@@ -169,7 +170,8 @@ describe('rejectParticipant — local storage baseline behavior', () => {
       throw new Error('Realtime rejection failed after mutation');
     });
 
-    await storageEngine.rejectParticipant(session.participantId, 'Test rejection');
+    await expect(storageEngine.rejectParticipant(session.participantId, 'Test rejection'))
+      .rejects.toThrow('Realtime rejection failed after mutation');
 
     // @ts-expect-error accessing protected method
     storageEngine._rejectParticipantRealtime = originalRejectParticipantRealtime;
@@ -181,6 +183,22 @@ describe('rejectParticipant — local storage baseline behavior', () => {
     expect(assignment!.rejected).toBe(false);
     // @ts-expect-error accessing protected property
     expect(storageEngine.participantData?.rejected).toBe(false);
+  });
+
+  test('rejectParticipant reports rollback failures instead of hiding partial state', async () => {
+    const session = await storageEngine.initializeParticipantSession({}, configSimple, participantMetadata);
+    // @ts-expect-error accessing protected primitive
+    const originalReject = storageEngine._rejectParticipantRealtime.bind(storageEngine);
+    // @ts-expect-error accessing protected primitive
+    storageEngine._rejectParticipantRealtime = vi.fn(async (participantId: string) => {
+      await originalReject(participantId);
+      throw new Error('Primary realtime failure');
+    });
+    // @ts-expect-error accessing protected primitive
+    storageEngine._undoRejectParticipantRealtime = vi.fn().mockRejectedValue(new Error('Realtime rollback failure'));
+
+    await expect(storageEngine.rejectParticipant(session.participantId, 'Test rejection'))
+      .rejects.toThrow('rollback also failed: Realtime rollback failure');
   });
 
   test('_undoRejectParticipantRealtime restores the reused participant timestamp', async () => {
