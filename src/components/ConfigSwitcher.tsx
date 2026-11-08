@@ -63,6 +63,7 @@ function StudyCard({
   }, [studyStatusAndTiming]);
 
   const currentMode = useMemo(() => {
+    if (import.meta.env.MODE === 'synthetic-preview') return 'Synthetic Preview — No Data Collection';
     if (!modes) return 'Unknown';
 
     if (modes.dataCollectionEnabled) {
