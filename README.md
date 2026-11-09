@@ -93,12 +93,20 @@ HTTP loopback option is restricted to Vite development, with an exact loopback p
 explicit opt-in. No end-to-end ReVISit host/dev-server HTTP loopback flow has been verified; do not
 assume that serving the production build at `http://localhost` enables the iframe bridge.
 
-An earlier synthetic preview publication was reported at
-`https://bobthe88.github.io/visualization_revisit_study/` (workflow run `42510782417`, commit
-`d709c1c2d3d6b90e392febfb182e97055e9268db`). That earlier run's HTTP 200 and bundle check do not
-establish the contents of a later publication. For each manual preview dispatch, verify the exact
-revision and run outcome, then inspect the served config, visualization document, warning, and
-storage mode. Publication may replace the repository's active Pages contents. The separately
-selected Supabase collection path remains unverified and is not enabled by this synthetic preview.
+The user reported an earlier synthetic preview at
+`https://bobthe88.github.io/visualization_revisit_study/` (workflow `42510782417`, commit
+`d709c1c2d3d6b90e392febfb182e97055e9268db`), followed by the host-question preview at commit
+`69965bfce523f35fe8d6870d56a4df93ed187058` (workflow `42526395126`) and a direct-entry fix at
+commit `56f83c87d757e3fa9bc459db483d75b6bfc4ec30` (successful workflow `42527513101`). Root and
+direct entry were reported HTTP 200 after the fix. A separate partial live check observed the first
+trial and sidebar and 73 same-origin requests, but is not tied here to the fixed deployment. These
+reports were not independently rerun; HTTP 200 does not prove rendering, refresh or a complete live
+flow. The direct-entry fix is a synthetic-preview deployment claim, not proof that the separate
+production workflow has the same behavior.
+
+For each manual preview dispatch, verify the exact revision and run outcome, then inspect the served
+config, visualization document, warning, storage mode, rendered direct entry and refresh. Publication
+may replace the repository's active Pages contents. The previously proposed Supabase collection path
+remains unverified and is not enabled by this synthetic preview; no Supabase work is in the current scope.
 Keep using synthetic data only until scientific, governance, privacy, storage, security, recovery,
 and release gates are separately reviewed and verified.

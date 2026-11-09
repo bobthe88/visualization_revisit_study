@@ -39,3 +39,6 @@ supabase/volumes/db/data
 !supabase/volumes/api/
 
 coverage/
+
+/public/cedar-watch-pilot/app/
+/public/cedar-watch-pilot/assets/logo.svg
