@@ -19,6 +19,7 @@
     "generate-library-examples": "node libraryExampleStudyGenerator.cjs",
     "test": "playwright test",
     "test:pages-entry": "node --test scripts/prepare-pages-study-entry.test.mjs",
+    "test:cedar-build": "node --test scripts/check-cedar-watch-source.test.mjs",
     "unittest": "vitest",
     "unittest-coverage": "vitest run --coverage --coverage.reporter=text",
     "find-revisit-users": "bash scripts/find-revisit-users.sh",

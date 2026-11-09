@@ -43,7 +43,7 @@ jobs:
           yarn build:synthetic-preview
         env:
           GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
-          CEDAR_WATCH_SOURCE_COMMIT: 4b6927b12d212f139d003348b79c912a991bdb8b
+          CEDAR_WATCH_SOURCE_COMMIT: 898f8af4ddc54a09e4a5b8d9a7766b78600b6e7c
 
       - uses: actions/upload-pages-artifact@v3
         with:

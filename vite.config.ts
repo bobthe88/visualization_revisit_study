@@ -30,7 +30,12 @@ export default defineConfig(({ command, mode }) => {
     },
     test: {
       environment: 'jsdom',
-      exclude: ['./tests/**', 'node_modules/**'],
+      exclude: [
+        './tests/**',
+        'node_modules/**',
+        'scripts/check-cedar-watch-source.test.mjs',
+        'scripts/prepare-pages-study-entry.test.mjs',
+      ],
       setupFiles: ['vitest-localstorage-mock'],
       fileParallelism: true,
       maxWorkers: '100%',

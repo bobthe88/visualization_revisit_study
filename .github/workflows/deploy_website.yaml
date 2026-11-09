@@ -59,7 +59,7 @@ jobs:
           CEDAR_WATCH_BASE_PATH="${VITE_BASE_PATH%/}/cedar-watch-pilot/app/" yarn build
         env:
           VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH || (github.event.repository.name == format('{0}.github.io', github.repository_owner) && '/' || format('/{0}/', github.event.repository.name)) }}
-          CEDAR_WATCH_SOURCE_COMMIT: 4b6927b12d212f139d003348b79c912a991bdb8b
+          CEDAR_WATCH_SOURCE_COMMIT: 898f8af4ddc54a09e4a5b8d9a7766b78600b6e7c
           CEDAR_WATCH_PARENT_ORIGINS: ${{ vars.CEDAR_WATCH_PARENT_ORIGINS }}
           CEDAR_WATCH_REQUIRE_PARENT_ORIGINS: 'true'
           VITE_STORAGE_ENGINE: supabase

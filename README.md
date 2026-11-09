@@ -26,6 +26,69 @@ To run your study based on this template locally, you will need to install node 
 
 ## Cedar Watch synthetic preview: current behavior and limits
 
+### Candidate pin reconciliation
+
+The current scope is option #1 only: reconcile the candidate child pin and its documentation. No
+Supabase work is authorized. The build script specifies child source
+`898f8af4ddc54a09e4a5b8d9a7766b78600b6e7c` and only
+`scripts/cedar-watch-testing-library.patch`, which pins the child test dependency
+`@testing-library/dom` to `10.4.1`. The user reports that the sole patch was applied, the candidate
+build passed, child tests passed 27, and root tests passed 90 on rerun. An independent
+tester reports a local HTTPS browser run against the exact built `dist`, completing all ten trials
+and the survey with no off-origin requests observed. The reported full host suite had 2109 passed,
+1 failed and 1 skipped; the failure is reported as a preexisting missing fixture, not a passing
+suite. Separate script tests passed. These are reported results, not rerun during this documentation
+update. They do not establish production readiness. No candidate live deployment is reported. Earlier
+publications and the separately identified older test evidence below remain historical baseline
+evidence and must not be attributed to the candidate.
+
+The host-owned, fixed-group synthetic instrument is a scientific change from the earlier
+child-owned, four-group standalone baseline, not merely a packaging update or a proven equivalent
+instrument. Preserve the historical baseline and review the exact candidate stimuli, behavior and
+analysis implications with investigators before any participant use. The source pin change itself
+also needs a reviewed comparison against that baseline; the patch's test dependency scope does not
+establish equivalence of the upstream source.
+
+The script rejects a source override unless it equals the reviewed SHA, before fetching. A different
+revision requires review and an update to the allowlist. Both deployment workflow definitions pin
+the reviewed SHA. The source guard checks markers in their designated bridge, contract, visualization,
+Vite and test files; `yarn test:cedar-build` checks the guard, workflow pins and override rejection,
+and the lint/build CI workflow runs it. The guard CLI now handles paths containing spaces; the user
+reports all 4 guard tests passed, including valid and invalid inputs through that CLI. This result
+was not rerun for this documentation update. CI configuration is not evidence of a successful remote run.
+Marker checks are not behavioral proof.
+
+The script verifies the fetched commit, applies the patch and checks source markers. It hashes the
+actual Git `HEAD` tree ID and the patch file's SHA-256 as the exact UTF-8 line
+`<tree-id>  <patch-sha256>\n`, SHA-256 hashes that line and takes its first 16 hex characters.
+The child build receives `VITE_SOURCE_COMMIT` as
+`<commit>+testing-library-<16-character-hash>`. This is not a hash of the commit plus patch, nor
+an artifact digest or proof of reproducibility. The reported build's source tree is
+`ecedace4ca3ec38fa74ff7fa5d0d3a0a406cb0fe`, patch SHA-256 is
+`683451099d37f879ff703da2316a8b3f6e33b40fd9b5923fe34db1f19ffed74f`, and fingerprint is
+`898f8af4ddc54a09e4a5b8d9a7766b78600b6e7c+testing-library-72815a6ee6386fcc`. The reported
+environment was Linux arm64, Node 24, npm 11 and Yarn 1. The reported origin was
+`https://bobthe88.github.io`, host base `/visualization_revisit_study/`, and child base
+`/visualization_revisit_study/cedar-watch-pilot/app/`. The temporary candidate artifact assembled
+over host `dist` had 272 files and digest
+`93abfa3ec2111171b5d74473455bb231dd263b28b2be58b41bc37a7239437250`; its child output had
+6 files and digest `fb59158d49e7cd129443afc686aef15d8a4d0cf0dfe3a2972adbd358e9d9b4f6`. Each
+digest is SHA-256 of a manifest ordered by lexical relative path, with each line formatted
+`<sha256>  <relative path>\n`. The host base commit was reported as `6acb1e3` with dirty non-doc
+source digest `7ee5d989b3a5fef3f76190c41f95d6283c01663fe842b612bbaf0e127c102333`, derived from
+the base, binary diff and untracked guard files. The reported output digest and exact-dist browser
+evidence are historical: the artifact predates the final guard source change and does not exactly
+match the final commit. This working-tree build output is not a clean commit, deployed-site digest
+or independent reproducibility proof. Host source may have changed after the build, and the final
+commit does not have the same identity as this working-tree digest. No new preview was published.
+See `artifacts/design.md` for remaining provenance limits.
+
+The inspected visualization source uses a Vega interval brush on applicable time charts, but its
+hosted `VisualizationApp` does not pass `onBrush` to `VegaChart`. The brush can be drawn in the
+chart without a host-level time-filter callback; selections and brush events are not recorded as
+trial data. Confirm behavior against the exact pinned checkout and have investigators review its
+scientific implications. This is not evidence of stimulus equivalence.
+
 The current checked-in study is registered as `cedar-watch-pilot` in `public/global.json` and
 configured in `public/cedar-watch-pilot/StudyConfig.json`. The host, not the embedded app, owns the
 study flow: a fictional practice with feedback, ten trial questions, confidence and perceived-
@@ -66,12 +129,12 @@ mocked iframe/controller and storage tests provide narrower checks of existing h
 `src/components/Shell.tsx`, the IP lookup to `https://api.ipify.org?format=json` is skipped in the
 `synthetic-preview` mode, but remains in production mode. An earlier local rehearsal identified
 that request; it is historical evidence and does not describe the current exact synthetic-preview
-build. The latest reported exact-build browser test observed no ipify or other off-origin calls
-among 119 requests. This observation applies to that tested synthetic build, not production or an
-undeployed preview; production's external request remains subject to privacy review. Do not claim
+build. An earlier reported exact-build browser test observed no ipify or other off-origin calls
+among 119 requests. This observation applies to that tested historical synthetic build, not the
+candidate, production or an undeployed preview; production's external request remains subject to privacy review. Do not claim
 that production is fully offline or that the production lookup has been disabled.
 
-An earlier local-browser rehearsal reported in `artifacts/design.md` used the current config served
+Historical evidence, separate from the candidate reruns above: an earlier local-browser rehearsal reported in `artifacts/design.md` used the current config served
 separately from an earlier built artifact, so that run alone was mixed-version evidence. An
 independent tester later exercised the exact rebuilt `dist` over local HTTPS in Chromium, completing
 practice (including a wrong answer), all ten trials, the survey, and debrief; required-answer gating

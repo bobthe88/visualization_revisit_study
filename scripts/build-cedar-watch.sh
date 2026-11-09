@@ -2,9 +2,10 @@
 set -eu
 
 source_repo="https://github.com/curentleaf/adaptive-visualization-recommender.git"
-source_commit="${CEDAR_WATCH_SOURCE_COMMIT:-4b6927b12d212f139d003348b79c912a991bdb8b}"
+reviewed_source_commit="898f8af4ddc54a09e4a5b8d9a7766b78600b6e7c"
+source_commit="${CEDAR_WATCH_SOURCE_COMMIT:-$reviewed_source_commit}"
 patch_dir="$(pwd)/scripts"
-bridge_patches="$patch_dir/cedar-watch-revisit-bridge.patch $patch_dir/cedar-watch-loopback.patch $patch_dir/cedar-watch-tests.patch $patch_dir/cedar-watch-testing-library.patch $patch_dir/cedar-watch-visualization.patch"
+dependency_patch="$patch_dir/cedar-watch-testing-library.patch"
 checkout="${RUNNER_TEMP:-/tmp}/cedar-watch-${source_commit}"
 app_output="${checkout}/study/dist"
 output_root="${CEDAR_WATCH_PUBLIC_DIR:-public}"
@@ -23,6 +24,10 @@ if [ "${#source_commit}" -ne 40 ]; then
   printf 'CEDAR_WATCH_SOURCE_COMMIT must be a full 40-character commit SHA.\n' >&2
   exit 1
 fi
+if [ "$source_commit" != "$reviewed_source_commit" ]; then
+  printf 'CEDAR_WATCH_SOURCE_COMMIT must match the explicitly reviewed source revision: %s. Review and update the allowlist before changing it.\n' "$reviewed_source_commit" >&2
+  exit 1
+fi
 if [ "${CEDAR_WATCH_REQUIRE_PARENT_ORIGINS:-false}" = "true" ] && [ -z "$parent_origins" ]; then
   printf 'CEDAR_WATCH_PARENT_ORIGINS must contain the approved parent origin(s) for deployment.\n' >&2
   exit 1
@@ -38,47 +43,6 @@ if [ -n "$parent_origins" ]; then
     }
   '
 fi
-
-for marker in \
-  VITE_REVISIT_PARENT_ORIGINS \
-  'map((origin: string) => origin.trim())' \
-  import.meta.env.DEV \
-  VITE_REVISIT_ALLOW_HTTP_LOOPBACK \
-  isAllowedParentOrigin \
-  'trustedParentOrigins: readonly string[] = []' \
-  'parsedOrigin === referrerOrigin' \
-  canSubmitHostedSession \
-  hostedSessionStarted \
-  bridgeInitialized \
-  hostedRecoveryBlocked \
-  resetCompletion \
-  'Hosted study data transfer' \
-  'session?.responses.length ?? 0' \
-  "session.status === 'complete' ? 'debrief' : 'practice'" \
-  'allows HTTP only for exact loopback origins under explicit development opt-in' \
-  createVisualizationHandshake \
-  '@REVISIT_COMMS/VIEW_READY' \
-  '@REVISIT_COMMS/VIEW_NOT_READY' \
-  viewNotReady \
-  VisualizationApp \
-  chartReadyGeneration \
-  isValidTrialTuple \
-  visualization.html \
-  visualization-app.test.tsx \
-  'onReady?: () => void' \
-  resumeThroughPractice; do
-  marker_found=false
-  for patch_file in $bridge_patches; do
-    if awk -v marker="$marker" 'index($0, marker) { found = 1 } END { exit !found }' "$patch_file"; then
-      marker_found=true
-      break
-    fi
-  done
-  if [ "$marker_found" != "true" ]; then
-    printf 'Bridge/test overlay is stale or incomplete (missing required marker: %s). Regenerate it from the child agent final changes.\n' "$marker" >&2
-    exit 1
-  fi
-done
 
 if [ -z "$public_base" ]; then
   if [ "${CEDAR_WATCH_MATCH_HOST_BASE:-false}" = "true" ]; then
@@ -121,17 +85,18 @@ if [ "$actual_commit" != "$source_commit" ]; then
   printf 'Fetched Cedar Watch revision does not match requested pin.\n' >&2
   exit 1
 fi
-for patch_file in $bridge_patches; do
-  git -C "$checkout" apply --check "$patch_file"
-  git -C "$checkout" apply "$patch_file"
-done
+git -C "$checkout" apply --check "$dependency_patch"
+git -C "$checkout" apply "$dependency_patch"
 git -C "$checkout" diff --check
-overlay_hash="$(sha256sum $bridge_patches | awk '{print $1}' | sha256sum | cut -c1-16)"
+node "$patch_dir/check-cedar-watch-source.mjs" "$checkout/study"
+patch_hash="$(sha256sum "$dependency_patch" | awk '{print $1}')"
+source_hash="$(git -C "$checkout" rev-parse 'HEAD^{tree}')"
+overlay_hash="$(printf '%s  %s\n' "$source_hash" "$patch_hash" | sha256sum | cut -c1-16)"
 
 NPM_CONFIG_LEGACY_PEER_DEPS=true npm ci --legacy-peer-deps --prefix "$checkout/study"
 VITE_REVISIT_PARENT_ORIGINS="$parent_origins" npm --prefix "$checkout/study" run typecheck
 VITE_REVISIT_PARENT_ORIGINS="$parent_origins" npm --prefix "$checkout/study" test
-VITE_SOURCE_COMMIT="${source_commit}+bridge-${overlay_hash}" \
+VITE_SOURCE_COMMIT="${source_commit}+testing-library-${overlay_hash}" \
 VITE_REVISIT_PARENT_ORIGINS="$parent_origins" \
 VITE_REVISIT_ALLOW_HTTP_LOOPBACK=false \
   npm --prefix "$checkout/study" run build -- --base "$public_base"
@@ -148,4 +113,4 @@ if [ ! -s "$target/visualization.html" ]; then
 fi
 mkdir -p "$assets_target"
 cp "$checkout/study/revisit/public/cedar-watch-pilot/assets/logo.svg" "$assets_target/logo.svg"
-printf 'Built Cedar Watch %s with bridge overlay %s into %s (base %s).\n' "$actual_commit" "$overlay_hash" "$target" "$public_base"
+printf 'Built Cedar Watch %s with testing-library patch %s and provenance %s into %s (base %s).\n' "$actual_commit" "$patch_hash" "$overlay_hash" "$target" "$public_base"
