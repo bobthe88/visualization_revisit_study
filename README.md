@@ -28,8 +28,12 @@ To run your study based on this template locally, you will need to install node 
 
 ### Candidate pin reconciliation
 
-The current scope is option #1 only: reconcile the candidate child pin and its documentation. No
-Supabase work is authorized. The build script specifies child source
+Option #1 reconciled the candidate child pin and its documentation. Option #2 is implemented as an
+offline, synthetic-only converter in `scripts/convert-cedar-watch-preview.mjs`, with tests in
+`scripts/tests/`. It consumes raw host `ParticipantData` as one object or an analysis-download array
+plus the matching stored config. Its only supported config hash is
+`80d5196e20bbb0bb176122315bb06619ef0b1aeed87e47ff7a15f4251896d89e`, verified as SHA-256 of UTF-8
+`JSON.stringify(parsedConfig)` (the host method). No Supabase work is authorized. The build script specifies child source
 `898f8af4ddc54a09e4a5b8d9a7766b78600b6e7c` and only
 `scripts/cedar-watch-testing-library.patch`, which pins the child test dependency
 `@testing-library/dom` to `10.4.1`. The user reports that the sole patch was applied, the candidate
@@ -109,10 +113,60 @@ separate response and must not be counted as an experimental trial. Trial identi
 family/variant/condition assignment come from the study configuration and must be joined to host
 records using the appropriate component and configuration version. `unknown` is an answer, not a
 missing response. Host exports are not the standalone child's session JSON/CSV and are not directly
-compatible with its analysis. Visualization selections, interaction samples, and event/timing
-telemetry are not captured as trial data in this flow. Do not infer attention, active time, or which
-reports a person selected. Inventory actual host export fields before analysis and define/test a
-versioned mapping; none is currently validated.
+compatible with its analysis. The offline converter emits a distinct
+`cedar-watch-research-preview/1` schema; it validates the frozen sequence, legal choices and trial
+parameters and separates practice, survey and debrief. The raw participant record does not establish
+the study namespace: output therefore uses `sourceStudyId: null`, names the value as
+`configuredInstrument`, and includes only the hash-verified config identity. Each trial tuple is
+nested under `configuredTrial`; it describes config, not observed exposure. `observedExposure` stays
+null, including when a response component exists, because the host record does not prove what was
+actually rendered. Missing trial entries and answers remain missing. When a StoredAnswer supplies
+`optionOrders`, host-rendered labels, values and `infoText` are checked against config while allowing
+ordering permutations; unsupported option fields and conflicting tooltip text are rejected. If an
+`optionOrders` object is present but omits any configured response entry, the record is quarantined
+even though the host may fall back to config options at render time; that incomplete-order fallback
+is intentionally excluded because it does not prove the choice set recorded for that component.
+Visualization interactions, child timing,
+consent and session identity are not captured or fabricated. Host timestamps and window events may
+exist in raw exports but are not child interactions or validated active time. The source participant
+ID is retained as a pseudonym, but it remains a linkable identifier and is not de-identification;
+protect both raw and converted outputs. Raw inputs can contain sensitive metadata. This
+synthetic-only mapping is not an approved analysis dataset or evidence of collection readiness.
+
+Run locally with `node scripts/convert-cedar-watch-preview.mjs <participant.json> <stored-config.json> <new-output.json>`.
+Run it from a trusted private output directory. The CLI requires a new, non-existing output path,
+uses an exclusive link to publish a fully written temporary file, and never logs participant fields.
+This does not protect against a hostile actor concurrently changing a writable output directory.
+It accepts a raw participant object or an analysis-download array (whose rows may include
+`qualitativeCodes`). `cedar-watch-analysis-download.json` is a sanitized, derived fixture captured
+from the actual local DownloadButtons JSON download; it is explicitly not a raw exact download. It
+contains one participant with all 13 component-answer records, `completed: true`, and the matching
+analysis config is `cedar-watch-analysis-config.json`; tests pass the fixture's inner `participants`
+array directly to the converter and golden-compare all normalized response values, trial tuples,
+completion/rejection status, configured-trial provenance, null exposure, practice/survey/debrief and
+non-captured telemetry declarations. The
+single-record unit tests derive a raw participant-shaped value from that same sanitized row by
+removing only the analysis wrapper in test code; neither form is presented as a raw exact export.
+Input files must be regular files and are read through
+a bounded stream, capped at 10 MiB; nesting is capped at 64 and arrays at 100 participants. Output is
+capped at 10 MiB after serialization; that output check is not itself a memory bound. Duplicate JSON
+keys are rejected. Empty arrays produce a valid zero-record envelope. Completion remains
+boolean/null/unknown as observed. A valid ended component remains ended if its end timestamp is less
+than its start timestamp, with `timingAnomaly: true`; a wall-clock rollback is possible, and no
+duration is inferred. Only the host-supported rejected values (`false` or a reason/timestamp object)
+are accepted; the object timestamp must be finite. Only explicit validation errors quarantine a
+participant row; unexpected converter errors are not silently relabeled as invalid input. The CLI
+hashes the exact input bytes; direct calls on parsed objects report a
+null source-byte digest and cannot supply one. Invalid participant rows contain only source index and
+a safe reason code in diagnostics.
+
+CI runs the converter and parser security suites explicitly with `yarn test:cedar-export`; those
+Node-native tests are excluded from Vitest discovery. Latest local checks: this command passed 22
+tests, `yarn unittest run src/storage/tests/analysisDownloadFixture.spec.ts` passed 4 tests, and
+`yarn lint`, focused ESLint, and `yarn typecheck` passed. The full `yarn unittest run` completed with
+152 files passed, 1 failed, 2113 tests passed, 1 failed, and 1 skipped. The one failure is the known
+dynamic-fixture expectation in `src/routes/tests/utils.spec.tsx:227` (`HSLColorCodes` expected,
+`__dynamicLoading` received); the full suite is not wholly passing.
 
 The preview uses browser `localStorage`, not a verified central durable store. Browser data may be
 cleared, unavailable, or lost; a downloaded export is a separate copy. Progress or completion in

@@ -1,0 +1,1209 @@
+{
+  "fixtureDescription": "Sanitized deterministic fixture derived from the actual local DownloadButtons JSON output shape produced in a browser-generated synthetic session. All participant responses and behavioral fields here are fabricated from the matching study config; this is not a raw exact analysis download.",
+  "downloadFormat": "DownloadButtons JSON participant array; one participant",
+  "participantIdRedaction": "Fixed synthetic-pid-001; metadata redacted; timestamps normalized; window events removed.",
+  "participants": [
+    {
+      "participantId": "synthetic-pid-001",
+      "participantConfigHash": "80d5196e20bbb0bb176122315bb06619ef0b1aeed87e47ff7a15f4251896d89e",
+      "sequence": {
+        "orderPath": "root",
+        "order": "fixed",
+        "components": [
+          "practice",
+          "trial-corroboration-a",
+          "trial-corroboration-b",
+          "trial-conflict-a",
+          "trial-conflict-b",
+          "trial-uncertain-a",
+          "trial-uncertain-b",
+          "trial-quality-a",
+          "trial-quality-b",
+          "trial-anomaly-a",
+          "trial-anomaly-b",
+          "usability",
+          "debrief",
+          "end"
+        ],
+        "skip": [],
+        "interruptions": []
+      },
+      "participantIndex": 1,
+      "answers": {
+        "practice_0": {
+          "answer": {
+            "practice-evidence": "",
+            "practice-understanding": "No"
+          },
+          "identifier": "practice_0",
+          "trialOrder": "0",
+          "componentName": "practice",
+          "incorrectAnswers": {},
+          "startTime": 1000,
+          "endTime": 1500,
+          "windowEvents": [],
+          "timedOut": false,
+          "helpButtonClickedCount": 0,
+          "parameters": {},
+          "correctAnswer": [
+            {
+              "id": "practice-understanding",
+              "answer": "No"
+            }
+          ],
+          "optionOrders": {
+            "practice-understanding": [
+              {
+                "label": "Yes",
+                "value": "Yes"
+              },
+              {
+                "label": "No",
+                "value": "No"
+              }
+            ]
+          },
+          "questionOrders": {},
+          "formOrder": {
+            "response": [
+              "practice-evidence",
+              "practice-understanding"
+            ]
+          },
+          "checkAnswer": {
+            "attemptsUsed": 1,
+            "correct": true,
+            "responses": {
+              "practice-understanding": true
+            }
+          },
+          "responseSubmitAttempted": false
+        },
+        "trial-corroboration-a_1": {
+          "answer": {
+            "q-corr-a": "same-items",
+            "confidence-corr-a": "1",
+            "difficulty-corr-a": "1"
+          },
+          "identifier": "trial-corroboration-a_1",
+          "trialOrder": "1",
+          "componentName": "trial-corroboration-a",
+          "incorrectAnswers": {},
+          "startTime": 2000,
+          "endTime": 2500,
+          "windowEvents": [],
+          "timedOut": false,
+          "helpButtonClickedCount": 0,
+          "parameters": {
+            "contractVersion": 1,
+            "trialId": "corroboration-A-baseline",
+            "scenarioFamily": "corroboration",
+            "taskVariant": "A",
+            "condition": "baseline",
+            "stimulusSeed": 271828
+          },
+          "correctAnswer": [],
+          "optionOrders": {
+            "q-corr-a": [
+              {
+                "label": "No. The reports may describe the same items, so their counts should not be added.",
+                "value": "same-items"
+              },
+              {
+                "label": "Yes. Add each source-reported count to obtain distinct vehicles.",
+                "value": "sum-counts"
+              },
+              {
+                "label": "Yes. Only one source made a report.",
+                "value": "single-source"
+              },
+              {
+                "label": "I cannot determine an answer from the available reports.",
+                "value": "unknown"
+              }
+            ],
+            "confidence-corr-a": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ],
+            "difficulty-corr-a": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ]
+          },
+          "questionOrders": {},
+          "formOrder": {
+            "response": [
+              "q-corr-a",
+              "confidence-corr-a",
+              "difficulty-corr-a"
+            ]
+          },
+          "responseSubmitAttempted": false
+        },
+        "trial-corroboration-b_2": {
+          "answer": {
+            "q-corr-b": "unknown",
+            "confidence-corr-b": "1",
+            "difficulty-corr-b": "1"
+          },
+          "identifier": "trial-corroboration-b_2",
+          "trialOrder": "2",
+          "componentName": "trial-corroboration-b",
+          "incorrectAnswers": {},
+          "startTime": 3000,
+          "endTime": 3500,
+          "windowEvents": [],
+          "timedOut": false,
+          "helpButtonClickedCount": 0,
+          "parameters": {
+            "contractVersion": 1,
+            "trialId": "corroboration-B-recommended",
+            "scenarioFamily": "corroboration",
+            "taskVariant": "B",
+            "condition": "recommended",
+            "stimulusSeed": 271828
+          },
+          "correctAnswer": [],
+          "optionOrders": {
+            "q-corr-b": [
+              {
+                "label": "Observation Team Cedar, Imagery Review Desk, Road Patrol Log, and Community Contact Network.",
+                "value": "four-sources"
+              },
+              {
+                "label": "Observation Team Cedar only.",
+                "value": "one-source"
+              },
+              {
+                "label": "Every source in the dataset.",
+                "value": "all-sources"
+              },
+              {
+                "label": "I cannot determine an answer from the available reports.",
+                "value": "unknown"
+              }
+            ],
+            "confidence-corr-b": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ],
+            "difficulty-corr-b": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ]
+          },
+          "questionOrders": {},
+          "formOrder": {
+            "response": [
+              "q-corr-b",
+              "confidence-corr-b",
+              "difficulty-corr-b"
+            ]
+          },
+          "responseSubmitAttempted": false
+        },
+        "trial-conflict-a_3": {
+          "answer": {
+            "q-conflict-a": "unknown-not-zero",
+            "confidence-conflict-a": "1",
+            "difficulty-conflict-a": "1"
+          },
+          "identifier": "trial-conflict-a_3",
+          "trialOrder": "3",
+          "componentName": "trial-conflict-a",
+          "incorrectAnswers": {},
+          "startTime": 4000,
+          "endTime": 4500,
+          "windowEvents": [],
+          "timedOut": false,
+          "helpButtonClickedCount": 0,
+          "parameters": {
+            "contractVersion": 1,
+            "trialId": "conflict-A-recommended",
+            "scenarioFamily": "conflict",
+            "taskVariant": "A",
+            "condition": "recommended",
+            "stimulusSeed": 271828
+          },
+          "correctAnswer": [],
+          "optionOrders": {
+            "q-conflict-a": [
+              {
+                "label": "No count was recorded; missing is not zero.",
+                "value": "unknown-not-zero"
+              },
+              {
+                "label": "The source reported zero vehicles.",
+                "value": "zero-count"
+              },
+              {
+                "label": "The source confirmed the count of about six.",
+                "value": "same-as-six"
+              },
+              {
+                "label": "I cannot determine an answer from the available reports.",
+                "value": "unknown"
+              }
+            ],
+            "confidence-conflict-a": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ],
+            "difficulty-conflict-a": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ]
+          },
+          "questionOrders": {},
+          "formOrder": {
+            "response": [
+              "q-conflict-a",
+              "confidence-conflict-a",
+              "difficulty-conflict-a"
+            ]
+          },
+          "responseSubmitAttempted": false
+        },
+        "trial-conflict-b_4": {
+          "answer": {
+            "q-conflict-b": "six-vs-four",
+            "confidence-conflict-b": "1",
+            "difficulty-conflict-b": "1"
+          },
+          "identifier": "trial-conflict-b_4",
+          "trialOrder": "4",
+          "componentName": "trial-conflict-b",
+          "incorrectAnswers": {},
+          "startTime": 5000,
+          "endTime": 5500,
+          "windowEvents": [],
+          "timedOut": false,
+          "helpButtonClickedCount": 0,
+          "parameters": {
+            "contractVersion": 1,
+            "trialId": "conflict-B-baseline",
+            "scenarioFamily": "conflict",
+            "taskVariant": "B",
+            "condition": "baseline",
+            "stimulusSeed": 271828
+          },
+          "correctAnswer": [],
+          "optionOrders": {
+            "q-conflict-b": [
+              {
+                "label": "Sources reported about six and four; the evidence does not establish a total inventory.",
+                "value": "six-vs-four"
+              },
+              {
+                "label": "The reports establish sixteen distinct vehicles.",
+                "value": "total-sixteen"
+              },
+              {
+                "label": "Every source reported about six vehicles.",
+                "value": "all-six"
+              },
+              {
+                "label": "I cannot determine an answer from the available reports.",
+                "value": "unknown"
+              }
+            ],
+            "confidence-conflict-b": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ],
+            "difficulty-conflict-b": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ]
+          },
+          "questionOrders": {},
+          "formOrder": {
+            "response": [
+              "q-conflict-b",
+              "confidence-conflict-b",
+              "difficulty-conflict-b"
+            ]
+          },
+          "responseSubmitAttempted": false
+        },
+        "trial-uncertain-a_5": {
+          "answer": {
+            "q-uncertain-a": "four-hours",
+            "confidence-uncertain-a": "1",
+            "difficulty-uncertain-a": "1"
+          },
+          "identifier": "trial-uncertain-a_5",
+          "trialOrder": "5",
+          "componentName": "trial-uncertain-a",
+          "incorrectAnswers": {},
+          "startTime": 6000,
+          "endTime": 6500,
+          "windowEvents": [],
+          "timedOut": false,
+          "helpButtonClickedCount": 0,
+          "parameters": {
+            "contractVersion": 1,
+            "trialId": "uncertain-A-baseline",
+            "scenarioFamily": "uncertain",
+            "taskVariant": "A",
+            "condition": "baseline",
+            "stimulusSeed": 271828
+          },
+          "correctAnswer": [],
+          "optionOrders": {
+            "q-uncertain-a": [
+              {
+                "label": "About four exercise hours.",
+                "value": "four-hours"
+              },
+              {
+                "label": "About one exercise hour.",
+                "value": "one-hour"
+              },
+              {
+                "label": "About eight exercise hours.",
+                "value": "eight-hours"
+              },
+              {
+                "label": "I cannot determine an answer from the available reports.",
+                "value": "unknown"
+              }
+            ],
+            "confidence-uncertain-a": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ],
+            "difficulty-uncertain-a": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ]
+          },
+          "questionOrders": {},
+          "formOrder": {
+            "response": [
+              "q-uncertain-a",
+              "confidence-uncertain-a",
+              "difficulty-uncertain-a"
+            ]
+          },
+          "responseSubmitAttempted": false
+        },
+        "trial-uncertain-b_6": {
+          "answer": {
+            "q-uncertain-b": "observation-not-receipt",
+            "confidence-uncertain-b": "1",
+            "difficulty-uncertain-b": "1"
+          },
+          "identifier": "trial-uncertain-b_6",
+          "trialOrder": "6",
+          "componentName": "trial-uncertain-b",
+          "incorrectAnswers": {},
+          "startTime": 7000,
+          "endTime": 7500,
+          "windowEvents": [],
+          "timedOut": false,
+          "helpButtonClickedCount": 0,
+          "parameters": {
+            "contractVersion": 1,
+            "trialId": "uncertain-B-recommended",
+            "scenarioFamily": "uncertain",
+            "taskVariant": "B",
+            "condition": "recommended",
+            "stimulusSeed": 271828
+          },
+          "correctAnswer": [],
+          "optionOrders": {
+            "q-uncertain-b": [
+              {
+                "label": "Observation and receipt are separate; late receipt does not move the observation time.",
+                "value": "observation-not-receipt"
+              },
+              {
+                "label": "The reported activity necessarily continued until receipt.",
+                "value": "activity-at-receipt"
+              },
+              {
+                "label": "Observation and receipt always occurred at the same time.",
+                "value": "same-time"
+              },
+              {
+                "label": "I cannot determine an answer from the available reports.",
+                "value": "unknown"
+              }
+            ],
+            "confidence-uncertain-b": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ],
+            "difficulty-uncertain-b": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ]
+          },
+          "questionOrders": {},
+          "formOrder": {
+            "response": [
+              "q-uncertain-b",
+              "confidence-uncertain-b",
+              "difficulty-uncertain-b"
+            ]
+          },
+          "responseSubmitAttempted": false
+        },
+        "trial-quality-a_7": {
+          "answer": {
+            "q-quality-a": "not-verified",
+            "confidence-quality-a": "1",
+            "difficulty-quality-a": "1"
+          },
+          "identifier": "trial-quality-a_7",
+          "trialOrder": "7",
+          "componentName": "trial-quality-a",
+          "incorrectAnswers": {},
+          "startTime": 8000,
+          "endTime": 8500,
+          "windowEvents": [],
+          "timedOut": false,
+          "helpButtonClickedCount": 0,
+          "parameters": {
+            "contractVersion": 1,
+            "trialId": "quality-A-recommended",
+            "scenarioFamily": "quality",
+            "taskVariant": "A",
+            "condition": "recommended",
+            "stimulusSeed": 271828
+          },
+          "correctAnswer": [],
+          "optionOrders": {
+            "q-quality-a": [
+              {
+                "label": "No. Human verification is not recorded.",
+                "value": "not-verified"
+              },
+              {
+                "label": "Yes. The range is human verified.",
+                "value": "verified"
+              },
+              {
+                "label": "Yes. The range establishes an exact count.",
+                "value": "exact-count"
+              },
+              {
+                "label": "I cannot determine an answer from the available reports.",
+                "value": "unknown"
+              }
+            ],
+            "confidence-quality-a": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ],
+            "difficulty-quality-a": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ]
+          },
+          "questionOrders": {},
+          "formOrder": {
+            "response": [
+              "q-quality-a",
+              "confidence-quality-a",
+              "difficulty-quality-a"
+            ]
+          },
+          "responseSubmitAttempted": false
+        },
+        "trial-quality-b_8": {
+          "answer": {
+            "q-quality-b": "unresolved-range",
+            "confidence-quality-b": "1",
+            "difficulty-quality-b": "1"
+          },
+          "identifier": "trial-quality-b_8",
+          "trialOrder": "8",
+          "componentName": "trial-quality-b",
+          "incorrectAnswers": {},
+          "startTime": 9000,
+          "endTime": 9500,
+          "windowEvents": [],
+          "timedOut": false,
+          "helpButtonClickedCount": 0,
+          "parameters": {
+            "contractVersion": 1,
+            "trialId": "quality-B-baseline",
+            "scenarioFamily": "quality",
+            "taskVariant": "B",
+            "condition": "baseline",
+            "stimulusSeed": 271828
+          },
+          "correctAnswer": [],
+          "optionOrders": {
+            "q-quality-b": [
+              {
+                "label": "As an unresolved, source-reported range—not a precise count or a calibrated interval.",
+                "value": "unresolved-range"
+              },
+              {
+                "label": "As its midpoint, which is an exact count.",
+                "value": "midpoint"
+              },
+              {
+                "label": "As zero because the translation is unresolved.",
+                "value": "zero"
+              },
+              {
+                "label": "I cannot determine an answer from the available reports.",
+                "value": "unknown"
+              }
+            ],
+            "confidence-quality-b": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ],
+            "difficulty-quality-b": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ]
+          },
+          "questionOrders": {},
+          "formOrder": {
+            "response": [
+              "q-quality-b",
+              "confidence-quality-b",
+              "difficulty-quality-b"
+            ]
+          },
+          "responseSubmitAttempted": false
+        },
+        "trial-anomaly-a_9": {
+          "answer": {
+            "q-anomaly-a": "no-proof",
+            "confidence-anomaly-a": "1",
+            "difficulty-anomaly-a": "1"
+          },
+          "identifier": "trial-anomaly-a_9",
+          "trialOrder": "9",
+          "componentName": "trial-anomaly-a",
+          "incorrectAnswers": {},
+          "startTime": 10000,
+          "endTime": 10500,
+          "windowEvents": [],
+          "timedOut": false,
+          "helpButtonClickedCount": 0,
+          "parameters": {
+            "contractVersion": 1,
+            "trialId": "anomaly-A-baseline",
+            "scenarioFamily": "anomaly",
+            "taskVariant": "A",
+            "condition": "baseline",
+            "stimulusSeed": 271828
+          },
+          "correctAnswer": [],
+          "optionOrders": {
+            "q-anomaly-a": [
+              {
+                "label": "No. Report frequency and coverage increased; activity is not established.",
+                "value": "no-proof"
+              },
+              {
+                "label": "Yes. More reports prove more vehicle activity.",
+                "value": "activity-increased"
+              },
+              {
+                "label": "Yes. The reports prove activity decreased.",
+                "value": "activity-decreased"
+              },
+              {
+                "label": "I cannot determine an answer from the available reports.",
+                "value": "unknown"
+              }
+            ],
+            "confidence-anomaly-a": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ],
+            "difficulty-anomaly-a": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ]
+          },
+          "questionOrders": {},
+          "formOrder": {
+            "response": [
+              "q-anomaly-a",
+              "confidence-anomaly-a",
+              "difficulty-anomaly-a"
+            ]
+          },
+          "responseSubmitAttempted": false
+        },
+        "trial-anomaly-b_10": {
+          "answer": {
+            "q-anomaly-b": "frequency-and-coverage",
+            "confidence-anomaly-b": "1",
+            "difficulty-anomaly-b": "1"
+          },
+          "identifier": "trial-anomaly-b_10",
+          "trialOrder": "10",
+          "componentName": "trial-anomaly-b",
+          "incorrectAnswers": {},
+          "startTime": 11000,
+          "endTime": 11500,
+          "windowEvents": [],
+          "timedOut": false,
+          "helpButtonClickedCount": 0,
+          "parameters": {
+            "contractVersion": 1,
+            "trialId": "anomaly-B-recommended",
+            "scenarioFamily": "anomaly",
+            "taskVariant": "B",
+            "condition": "recommended",
+            "stimulusSeed": 271828
+          },
+          "correctAnswer": [],
+          "optionOrders": {
+            "q-anomaly-b": [
+              {
+                "label": "Report frequency and reporting coverage increased; underlying activity remains unknown.",
+                "value": "frequency-and-coverage"
+              },
+              {
+                "label": "Underlying vehicle activity and reporting coverage increased.",
+                "value": "activity-and-coverage"
+              },
+              {
+                "label": "Underlying vehicle activity increased; report coverage did not change.",
+                "value": "activity-only"
+              },
+              {
+                "label": "I cannot determine an answer from the available reports.",
+                "value": "unknown"
+              }
+            ],
+            "confidence-anomaly-b": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ],
+            "difficulty-anomaly-b": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ]
+          },
+          "questionOrders": {},
+          "formOrder": {
+            "response": [
+              "q-anomaly-b",
+              "confidence-anomaly-b",
+              "difficulty-anomaly-b"
+            ]
+          },
+          "responseSubmitAttempted": false
+        },
+        "usability_11": {
+          "answer": {
+            "evidence-clarity": "1",
+            "condition-preference": "baseline",
+            "easier-condition": "baseline"
+          },
+          "identifier": "usability_11",
+          "trialOrder": "11",
+          "componentName": "usability",
+          "incorrectAnswers": {},
+          "startTime": 12000,
+          "endTime": 12500,
+          "windowEvents": [],
+          "timedOut": false,
+          "helpButtonClickedCount": 0,
+          "parameters": {},
+          "correctAnswer": [],
+          "optionOrders": {
+            "evidence-clarity": [
+              {
+                "label": "1",
+                "value": "1"
+              },
+              {
+                "label": "2",
+                "value": "2"
+              },
+              {
+                "label": "3",
+                "value": "3"
+              },
+              {
+                "label": "4",
+                "value": "4"
+              },
+              {
+                "label": "5",
+                "value": "5"
+              }
+            ],
+            "condition-preference": [
+              {
+                "label": "Evidence-only view",
+                "value": "baseline"
+              },
+              {
+                "label": "Task-aware recommended view",
+                "value": "recommended"
+              },
+              {
+                "label": "No preference",
+                "value": "no-preference"
+              }
+            ],
+            "easier-condition": [
+              {
+                "label": "Evidence-only view",
+                "value": "baseline"
+              },
+              {
+                "label": "Task-aware recommended view",
+                "value": "recommended"
+              },
+              {
+                "label": "No difference",
+                "value": "no-difference"
+              }
+            ]
+          },
+          "questionOrders": {},
+          "formOrder": {
+            "response": [
+              "evidence-clarity",
+              "condition-preference",
+              "easier-condition"
+            ]
+          },
+          "responseSubmitAttempted": false
+        },
+        "debrief_12": {
+          "answer": {
+            "preview-acknowledgement": "Understood"
+          },
+          "identifier": "debrief_12",
+          "trialOrder": "12",
+          "componentName": "debrief",
+          "incorrectAnswers": {},
+          "startTime": 13000,
+          "endTime": 13500,
+          "windowEvents": [],
+          "timedOut": false,
+          "helpButtonClickedCount": 0,
+          "parameters": {},
+          "correctAnswer": [],
+          "optionOrders": {
+            "preview-acknowledgement": [
+              {
+                "label": "Understood",
+                "value": "Understood"
+              }
+            ]
+          },
+          "questionOrders": {},
+          "formOrder": {
+            "response": [
+              "preview-acknowledgement"
+            ]
+          },
+          "responseSubmitAttempted": false
+        }
+      },
+      "searchParams": {},
+      "metadata": {
+        "userAgent": "REDACTED",
+        "resolution": {
+          "width": "REDACTED",
+          "height": "REDACTED"
+        },
+        "language": "REDACTED",
+        "ip": null
+      },
+      "rejected": false,
+      "participantTags": [],
+      "stage": "DEFAULT",
+      "createdTime": 0,
+      "completed": true,
+      "qualitativeCodes": {
+        "participantTags": [],
+        "taskTags": {
+          "practice_0": [],
+          "trial-corroboration-a_1": [],
+          "trial-corroboration-b_2": [],
+          "trial-conflict-a_3": [],
+          "trial-conflict-b_4": [],
+          "trial-uncertain-a_5": [],
+          "trial-uncertain-b_6": [],
+          "trial-quality-a_7": [],
+          "trial-quality-b_8": [],
+          "trial-anomaly-a_9": [],
+          "trial-anomaly-b_10": [],
+          "usability_11": [],
+          "debrief_12": []
+        }
+      }
+    }
+  ],
+  "responseProvenance": "For each configured response, textOnly uses an empty string; radio responses use the configured correct answer when present, otherwise the first configured option, except q-corr-b deliberately selects the configured unknown option. Option labels/order and parameters are copied from the matching config. Behavioral flags, attempts, form order, and timestamps are neutral deterministic synthetic values; no observed participant choices or interaction traces are retained."
+}

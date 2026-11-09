@@ -1,0 +1,808 @@
+{
+  "$schema": "https://raw.githubusercontent.com/revisit-studies/study/v2.4.4/src/parser/StudyConfigSchema.json",
+  "studyMetadata": {
+    "title": "Cedar Watch Visualization Pilot — Synthetic Preview",
+    "version": "draft-1",
+    "authors": [],
+    "date": "2026-11-08",
+    "description": "Synthetic, deterministic group-0 preview only; assignment is not randomized and this config is not approved for participant collection.",
+    "organizations": []
+  },
+  "uiConfig": {
+    "logoPath": "cedar-watch-pilot/assets/logo.svg",
+    "contactEmail": "",
+    "withProgressBar": true,
+    "withSidebar": true,
+    "recordAudio": false,
+    "recordScreen": false
+  },
+  "components": {
+    "practice": {
+      "type": "questionnaire",
+      "instruction": "Practice · not an experimental trial. This separate fictional example is for learning the controls. It is not one of the Cedar Watch trial scenarios. This synthetic preview does not request or record research consent. The host records the practice answer as a practice response, separate from the ten trial responses.",
+      "response": [
+        {
+          "id": "practice-evidence",
+          "type": "textOnly",
+          "location": "aboveStimulus",
+          "prompt": "**Fictional Harbor Lane practice reports**\n\n| Report | Observed | Received | Reported count |\n| --- | --- | --- | --- |\n| Practice log A | 09:00 | 09:12 | Not recorded |\n| Practice log B | 09:10 | 09:42 | About 3 |\n\nIn the practice display, a count that is not recorded is unknown—not zero. Observation and receipt times describe different events. Reports can overlap and should not be added into a total."
+        },
+        {
+          "id": "practice-understanding",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Does “not recorded” mean the source reported zero?",
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "correctAnswer": [
+        {
+          "id": "practice-understanding",
+          "answer": "No"
+        }
+      ],
+      "provideFeedback": true,
+      "trainingAttempts": 1,
+      "allowFailedTraining": true,
+      "instructionLocation": "aboveStimulus",
+      "nextButtonLocation": "belowStimulus",
+      "nextButtonText": "Continue synthetic preview"
+    },
+    "trial-corroboration-a": {
+      "type": "website",
+      "path": "cedar-watch-pilot/app/visualization.html",
+      "description": "Synthetic fixed group 0, trial corroboration-A-baseline.",
+      "instruction": "Synthetic fixed group 0 — not randomized. Review the evidence visualization and answer in the reVISit sidebar.",
+      "parameters": {
+        "contractVersion": 1,
+        "trialId": "corroboration-A-baseline",
+        "scenarioFamily": "corroboration",
+        "taskVariant": "A",
+        "condition": "baseline",
+        "stimulusSeed": 271828
+      },
+      "response": [
+        {
+          "id": "q-corr-a",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Do similar reports establish a count of distinct vehicles?",
+          "options": [
+            {
+              "label": "No. The reports may describe the same items, so their counts should not be added.",
+              "value": "same-items"
+            },
+            {
+              "label": "Yes. Add each source-reported count to obtain distinct vehicles.",
+              "value": "sum-counts"
+            },
+            {
+              "label": "Yes. Only one source made a report.",
+              "value": "single-source"
+            },
+            {
+              "label": "I cannot determine an answer from the available reports.",
+              "value": "unknown"
+            }
+          ]
+        },
+        {
+          "id": "confidence-corr-a",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Confidence (1 = not confident, 5 = very confident)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "id": "difficulty-corr-a",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Perceived difficulty (1 = very easy, 5 = very difficult)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        }
+      ]
+    },
+    "trial-corroboration-b": {
+      "type": "website",
+      "path": "cedar-watch-pilot/app/visualization.html",
+      "description": "Synthetic fixed group 0, trial corroboration-B-recommended.",
+      "instruction": "Synthetic fixed group 0 — not randomized. Review the evidence visualization and answer in the reVISit sidebar.",
+      "parameters": {
+        "contractVersion": 1,
+        "trialId": "corroboration-B-recommended",
+        "scenarioFamily": "corroboration",
+        "taskVariant": "B",
+        "condition": "recommended",
+        "stimulusSeed": 271828
+      },
+      "response": [
+        {
+          "id": "q-corr-b",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Which sources are recorded as independently reporting similar counts?",
+          "options": [
+            {
+              "label": "Observation Team Cedar, Imagery Review Desk, Road Patrol Log, and Community Contact Network.",
+              "value": "four-sources"
+            },
+            {
+              "label": "Observation Team Cedar only.",
+              "value": "one-source"
+            },
+            {
+              "label": "Every source in the dataset.",
+              "value": "all-sources"
+            },
+            {
+              "label": "I cannot determine an answer from the available reports.",
+              "value": "unknown"
+            }
+          ]
+        },
+        {
+          "id": "confidence-corr-b",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Confidence (1 = not confident, 5 = very confident)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "id": "difficulty-corr-b",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Perceived difficulty (1 = very easy, 5 = very difficult)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        }
+      ]
+    },
+    "trial-conflict-a": {
+      "type": "website",
+      "path": "cedar-watch-pilot/app/visualization.html",
+      "description": "Synthetic fixed group 0, trial conflict-A-recommended.",
+      "instruction": "Synthetic fixed group 0 — not randomized. Review the evidence visualization and answer in the reVISit sidebar.",
+      "parameters": {
+        "contractVersion": 1,
+        "trialId": "conflict-A-recommended",
+        "scenarioFamily": "conflict",
+        "taskVariant": "A",
+        "condition": "recommended",
+        "stimulusSeed": 271828
+      },
+      "response": [
+        {
+          "id": "q-conflict-a",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "How should the missing count from the Radio Log Monitor be interpreted?",
+          "options": [
+            {
+              "label": "No count was recorded; missing is not zero.",
+              "value": "unknown-not-zero"
+            },
+            {
+              "label": "The source reported zero vehicles.",
+              "value": "zero-count"
+            },
+            {
+              "label": "The source confirmed the count of about six.",
+              "value": "same-as-six"
+            },
+            {
+              "label": "I cannot determine an answer from the available reports.",
+              "value": "unknown"
+            }
+          ]
+        },
+        {
+          "id": "confidence-conflict-a",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Confidence (1 = not confident, 5 = very confident)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "id": "difficulty-conflict-a",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Perceived difficulty (1 = very easy, 5 = very difficult)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        }
+      ]
+    },
+    "trial-conflict-b": {
+      "type": "website",
+      "path": "cedar-watch-pilot/app/visualization.html",
+      "description": "Synthetic fixed group 0, trial conflict-B-baseline.",
+      "instruction": "Synthetic fixed group 0 — not randomized. Review the evidence visualization and answer in the reVISit sidebar.",
+      "parameters": {
+        "contractVersion": 1,
+        "trialId": "conflict-B-baseline",
+        "scenarioFamily": "conflict",
+        "taskVariant": "B",
+        "condition": "baseline",
+        "stimulusSeed": 271828
+      },
+      "response": [
+        {
+          "id": "q-conflict-b",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "What do the available East Depot reports establish about the differing counts?",
+          "options": [
+            {
+              "label": "Sources reported about six and four; the evidence does not establish a total inventory.",
+              "value": "six-vs-four"
+            },
+            {
+              "label": "The reports establish sixteen distinct vehicles.",
+              "value": "total-sixteen"
+            },
+            {
+              "label": "Every source reported about six vehicles.",
+              "value": "all-six"
+            },
+            {
+              "label": "I cannot determine an answer from the available reports.",
+              "value": "unknown"
+            }
+          ]
+        },
+        {
+          "id": "confidence-conflict-b",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Confidence (1 = not confident, 5 = very confident)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "id": "difficulty-conflict-b",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Perceived difficulty (1 = very easy, 5 = very difficult)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        }
+      ]
+    },
+    "trial-uncertain-a": {
+      "type": "website",
+      "path": "cedar-watch-pilot/app/visualization.html",
+      "description": "Synthetic fixed group 0, trial uncertain-A-baseline.",
+      "instruction": "Synthetic fixed group 0 — not randomized. Review the evidence visualization and answer in the reVISit sidebar.",
+      "parameters": {
+        "contractVersion": 1,
+        "trialId": "uncertain-A-baseline",
+        "scenarioFamily": "uncertain",
+        "taskVariant": "A",
+        "condition": "baseline",
+        "stimulusSeed": 271828
+      },
+      "response": [
+        {
+          "id": "q-uncertain-a",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "How long after observation did the Field Report Liaison report arrive?",
+          "options": [
+            {
+              "label": "About four exercise hours.",
+              "value": "four-hours"
+            },
+            {
+              "label": "About one exercise hour.",
+              "value": "one-hour"
+            },
+            {
+              "label": "About eight exercise hours.",
+              "value": "eight-hours"
+            },
+            {
+              "label": "I cannot determine an answer from the available reports.",
+              "value": "unknown"
+            }
+          ]
+        },
+        {
+          "id": "confidence-uncertain-a",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Confidence (1 = not confident, 5 = very confident)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "id": "difficulty-uncertain-a",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Perceived difficulty (1 = very easy, 5 = very difficult)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        }
+      ]
+    },
+    "trial-uncertain-b": {
+      "type": "website",
+      "path": "cedar-watch-pilot/app/visualization.html",
+      "description": "Synthetic fixed group 0, trial uncertain-B-recommended.",
+      "instruction": "Synthetic fixed group 0 — not randomized. Review the evidence visualization and answer in the reVISit sidebar.",
+      "parameters": {
+        "contractVersion": 1,
+        "trialId": "uncertain-B-recommended",
+        "scenarioFamily": "uncertain",
+        "taskVariant": "B",
+        "condition": "recommended",
+        "stimulusSeed": 271828
+      },
+      "response": [
+        {
+          "id": "q-uncertain-b",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "What does the report’s receipt time tell you about when the observation occurred?",
+          "options": [
+            {
+              "label": "Observation and receipt are separate; late receipt does not move the observation time.",
+              "value": "observation-not-receipt"
+            },
+            {
+              "label": "The reported activity necessarily continued until receipt.",
+              "value": "activity-at-receipt"
+            },
+            {
+              "label": "Observation and receipt always occurred at the same time.",
+              "value": "same-time"
+            },
+            {
+              "label": "I cannot determine an answer from the available reports.",
+              "value": "unknown"
+            }
+          ]
+        },
+        {
+          "id": "confidence-uncertain-b",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Confidence (1 = not confident, 5 = very confident)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "id": "difficulty-uncertain-b",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Perceived difficulty (1 = very easy, 5 = very difficult)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        }
+      ]
+    },
+    "trial-quality-a": {
+      "type": "website",
+      "path": "cedar-watch-pilot/app/visualization.html",
+      "description": "Synthetic fixed group 0, trial quality-A-recommended.",
+      "instruction": "Synthetic fixed group 0 — not randomized. Review the evidence visualization and answer in the reVISit sidebar.",
+      "parameters": {
+        "contractVersion": 1,
+        "trialId": "quality-A-recommended",
+        "scenarioFamily": "quality",
+        "taskVariant": "A",
+        "condition": "recommended",
+        "stimulusSeed": 271828
+      },
+      "response": [
+        {
+          "id": "q-quality-a",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Was the translated personnel-count range human verified?",
+          "options": [
+            {
+              "label": "No. Human verification is not recorded.",
+              "value": "not-verified"
+            },
+            {
+              "label": "Yes. The range is human verified.",
+              "value": "verified"
+            },
+            {
+              "label": "Yes. The range establishes an exact count.",
+              "value": "exact-count"
+            },
+            {
+              "label": "I cannot determine an answer from the available reports.",
+              "value": "unknown"
+            }
+          ]
+        },
+        {
+          "id": "confidence-quality-a",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Confidence (1 = not confident, 5 = very confident)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "id": "difficulty-quality-a",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Perceived difficulty (1 = very easy, 5 = very difficult)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        }
+      ]
+    },
+    "trial-quality-b": {
+      "type": "website",
+      "path": "cedar-watch-pilot/app/visualization.html",
+      "description": "Synthetic fixed group 0, trial quality-B-baseline.",
+      "instruction": "Synthetic fixed group 0 — not randomized. Review the evidence visualization and answer in the reVISit sidebar.",
+      "parameters": {
+        "contractVersion": 1,
+        "trialId": "quality-B-baseline",
+        "scenarioFamily": "quality",
+        "taskVariant": "B",
+        "condition": "baseline",
+        "stimulusSeed": 271828
+      },
+      "response": [
+        {
+          "id": "q-quality-b",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "How should the ambiguous translated range be represented?",
+          "options": [
+            {
+              "label": "As an unresolved, source-reported range—not a precise count or a calibrated interval.",
+              "value": "unresolved-range"
+            },
+            {
+              "label": "As its midpoint, which is an exact count.",
+              "value": "midpoint"
+            },
+            {
+              "label": "As zero because the translation is unresolved.",
+              "value": "zero"
+            },
+            {
+              "label": "I cannot determine an answer from the available reports.",
+              "value": "unknown"
+            }
+          ]
+        },
+        {
+          "id": "confidence-quality-b",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Confidence (1 = not confident, 5 = very confident)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "id": "difficulty-quality-b",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Perceived difficulty (1 = very easy, 5 = very difficult)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        }
+      ]
+    },
+    "trial-anomaly-a": {
+      "type": "website",
+      "path": "cedar-watch-pilot/app/visualization.html",
+      "description": "Synthetic fixed group 0, trial anomaly-A-baseline.",
+      "instruction": "Synthetic fixed group 0 — not randomized. Review the evidence visualization and answer in the reVISit sidebar.",
+      "parameters": {
+        "contractVersion": 1,
+        "trialId": "anomaly-A-baseline",
+        "scenarioFamily": "anomaly",
+        "taskVariant": "A",
+        "condition": "baseline",
+        "stimulusSeed": 271828
+      },
+      "response": [
+        {
+          "id": "q-anomaly-a",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Does rising report volume establish increased vehicle activity?",
+          "options": [
+            {
+              "label": "No. Report frequency and coverage increased; activity is not established.",
+              "value": "no-proof"
+            },
+            {
+              "label": "Yes. More reports prove more vehicle activity.",
+              "value": "activity-increased"
+            },
+            {
+              "label": "Yes. The reports prove activity decreased.",
+              "value": "activity-decreased"
+            },
+            {
+              "label": "I cannot determine an answer from the available reports.",
+              "value": "unknown"
+            }
+          ]
+        },
+        {
+          "id": "confidence-anomaly-a",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Confidence (1 = not confident, 5 = very confident)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "id": "difficulty-anomaly-a",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Perceived difficulty (1 = very easy, 5 = very difficult)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        }
+      ]
+    },
+    "trial-anomaly-b": {
+      "type": "website",
+      "path": "cedar-watch-pilot/app/visualization.html",
+      "description": "Synthetic fixed group 0, trial anomaly-B-recommended.",
+      "instruction": "Synthetic fixed group 0 — not randomized. Review the evidence visualization and answer in the reVISit sidebar.",
+      "parameters": {
+        "contractVersion": 1,
+        "trialId": "anomaly-B-recommended",
+        "scenarioFamily": "anomaly",
+        "taskVariant": "B",
+        "condition": "recommended",
+        "stimulusSeed": 271828
+      },
+      "response": [
+        {
+          "id": "q-anomaly-b",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Which change is supported by the scripted reports?",
+          "options": [
+            {
+              "label": "Report frequency and reporting coverage increased; underlying activity remains unknown.",
+              "value": "frequency-and-coverage"
+            },
+            {
+              "label": "Underlying vehicle activity and reporting coverage increased.",
+              "value": "activity-and-coverage"
+            },
+            {
+              "label": "Underlying vehicle activity increased; report coverage did not change.",
+              "value": "activity-only"
+            },
+            {
+              "label": "I cannot determine an answer from the available reports.",
+              "value": "unknown"
+            }
+          ]
+        },
+        {
+          "id": "confidence-anomaly-b",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Confidence (1 = not confident, 5 = very confident)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "id": "difficulty-anomaly-b",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Perceived difficulty (1 = very easy, 5 = very difficult)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        }
+      ]
+    },
+    "usability": {
+      "type": "questionnaire",
+      "instruction": "Complete the required synthetic-preview usability survey.",
+      "response": [
+        {
+          "id": "evidence-clarity",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "How clear was the evidence overall? (1 = not clear, 5 = very clear)",
+          "options": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "id": "condition-preference",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Which view did you prefer overall?",
+          "options": [
+            {
+              "label": "Evidence-only view",
+              "value": "baseline"
+            },
+            {
+              "label": "Task-aware recommended view",
+              "value": "recommended"
+            },
+            {
+              "label": "No preference",
+              "value": "no-preference"
+            }
+          ]
+        },
+        {
+          "id": "easier-condition",
+          "type": "radio",
+          "location": "sidebar",
+          "prompt": "Which view felt easier to use?",
+          "options": [
+            {
+              "label": "Evidence-only view",
+              "value": "baseline"
+            },
+            {
+              "label": "Task-aware recommended view",
+              "value": "recommended"
+            },
+            {
+              "label": "No difference",
+              "value": "no-difference"
+            }
+          ]
+        }
+      ]
+    },
+    "debrief": {
+      "type": "questionnaire",
+      "instruction": "This is a synthetic fixed group-0 preview. It is not randomized and must not be used to collect participant data.",
+      "response": [
+        {
+          "id": "preview-acknowledgement",
+          "type": "radio",
+          "prompt": "This was a synthetic, non-randomized preview.",
+          "options": [
+            "Understood"
+          ]
+        }
+      ]
+    }
+  },
+  "sequence": {
+    "order": "fixed",
+    "components": [
+      "practice",
+      "trial-corroboration-a",
+      "trial-corroboration-b",
+      "trial-conflict-a",
+      "trial-conflict-b",
+      "trial-uncertain-a",
+      "trial-uncertain-b",
+      "trial-quality-a",
+      "trial-quality-b",
+      "trial-anomaly-a",
+      "trial-anomaly-b",
+      "usability",
+      "debrief"
+    ]
+  },
+  "errors": [],
+  "warnings": []
+}

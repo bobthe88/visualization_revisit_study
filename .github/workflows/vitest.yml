@@ -20,7 +20,10 @@ jobs:
           cache: "yarn"
 
       - name: Install dependencies
-        run: yarn install --immutable
+        run: yarn install --frozen-lockfile
+
+      - name: Run Cedar export converter tests
+        run: yarn test:cedar-export
 
       - name: Run unit tests
         run: yarn unittest

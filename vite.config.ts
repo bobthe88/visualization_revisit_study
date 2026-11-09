@@ -35,6 +35,7 @@ export default defineConfig(({ command, mode }) => {
         'node_modules/**',
         'scripts/check-cedar-watch-source.test.mjs',
         'scripts/prepare-pages-study-entry.test.mjs',
+        'scripts/tests/convert-cedar-watch-preview*.test.mjs',
       ],
       setupFiles: ['vitest-localstorage-mock'],
       fileParallelism: true,
